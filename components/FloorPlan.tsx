@@ -121,7 +121,7 @@ function SchematicBiblioteca() {
           </text>
 
           <path
-            d="M 0 16 L 128 14 L 128 122 L 86 146 L 0 146 Z"
+            d="M 0 16 L 128 14 L 128 141 L 124 146 L 0 146 Z"
             fill="#14532d44"
             stroke="#4ade80"
             strokeWidth="2"

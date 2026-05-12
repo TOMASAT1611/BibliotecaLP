@@ -5,7 +5,7 @@ import {
 } from "./geo";
 
 import type { AppState, Participant, Stall, Venue } from "./types";
-import { defaultPlanZones } from "./zones-default";
+import { defaultPlanZones, zonaPastoChamferM } from "./zones-default";
 
 function newSid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -30,6 +30,84 @@ function emptyVenue(): Venue {
     snapGridM: 1.5,
 
   };
+
+}
+
+
+/**
+ * Reemplaza la plaza “pasto” si tiene el bisel viejo muy grande (~40 % alto en el borde derecho)
+ * por la forma nueva proporcional manteniendo el mismo bounding box guardado (mesas/coords).
+ */
+function repairHugePastoChamfer(venue: Venue): Venue {
+
+
+  const ix = venue.zones.findIndex((z) => z.id === "pasto");
+
+
+  if (ix < 0) return venue;
+
+
+  const poly = venue.zones[ix]!.polygonM;
+
+
+  if (poly.length !== 5) return venue;
+
+
+  const bb = boundingBox(poly);
+
+
+  const spanX = bb.maxX - bb.minX;
+
+
+  const spanY = bb.maxY - bb.minY;
+
+
+  if (!(spanX > 0.08 && spanY > 0.08)) return venue;
+
+
+  const p2 = poly[2];
+
+
+  if (!p2) return venue;
+
+
+
+  /** Fracción de alto de caja desde el vértice 2 hasta el borde inferior (bisel viejo ≈ 0,6). */
+
+
+  const stripBelowFrac = (bb.maxY - p2.y) / spanY;
+
+
+  if (!(stripBelowFrac > 0.38)) return venue;
+
+
+
+  const fresh = zonaPastoChamferM();
+
+
+  const bf = boundingBox(fresh);
+
+
+  const wF = bf.maxX - bf.minX;
+
+
+  const hF = bf.maxY - bf.minY;
+
+
+  const scaled = fresh.map((p) => ({
+    x: bb.minX + ((p.x - bf.minX) / wF) * spanX,
+
+    y: bb.minY + ((p.y - bf.minY) / hF) * spanY,
+  }));
+
+
+  const next = venue.zones.map((zone, zi) =>
+    zi === ix ? { ...zone, polygonM: scaled } : zone,
+  );
+
+
+  return { ...venue, zones: next };
+
 
 }
 
@@ -687,7 +765,7 @@ export function migrateAppState(raw: unknown): AppState {
 
     : [];
 
-  const venueFixed = dropInvalidZones(venue);
+  const venueFixed = repairHugePastoChamfer(dropInvalidZones(venue));
 
   return {
 

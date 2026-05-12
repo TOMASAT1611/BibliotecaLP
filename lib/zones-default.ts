@@ -9,18 +9,34 @@ export const ADENTRO_BANDA_MESAS_16_M = 13.5;
 /** Anchura típica del salón marcada como “ANCHO 10,30” en tu plano derecho (referencia geométrica). */
 export const PLAJON_ANCHO_INTERIOR_M = 10.3;
 
+/** Recorte muy chico en la esquina inferior derecha (metros), proporcional al dibujo físico (“puntita”). */
+export const PASTO_CHAMFER_CLIP_X_M = 0.32;
+
+
+export const PASTO_CHAMFER_CLIP_Y_M = 0.36;
+
 /**
- * Plaza (dibujo papel): ancho máximo ~14,14 m, fondo mayor ~8,60 m con recorte en esquina inferior
- * derecha (bisel), similar al boceto a mano.
+ * Plaza: rectángulo ~14,14 × 8,60 m en planta + bisel diminuto abajo‑a la derecha (no un triángulo grande).
  */
 export function zonaPastoChamferM(): Pt[] {
   const W = 14.14;
+
+
   const H = 8.6;
+
+
+  /** No más del 8 % del lado — evita recuperar accidentalmente la forma “mega bisel”. */
+  const dx = Math.min(PASTO_CHAMFER_CLIP_X_M, W * 0.08);
+
+
+  const dy = Math.min(PASTO_CHAMFER_CLIP_Y_M, H * 0.08);
+
+
   return [
     { x: 0, y: 0 },
     { x: W, y: 0 },
-    { x: W, y: H * 0.4 },
-    { x: W * 0.6, y: H },
+    { x: W, y: H - dy },
+    { x: W - dx, y: H },
     { x: 0, y: H },
   ];
 }
@@ -100,11 +116,12 @@ export function defaultPlanZones(): PlanZone[] {
 
   const pastoz: PlanZone = {
     id: "pasto",
-    name: "Plaza pasto — ancho 14,14 m · largo 8,60 m (esquina recortada como en el dibujo)",
+    name: "Plaza pasto — ancho 14,14 m · largo 8,60 m (recorte mínimo · esquina inferior derecha)",
     polygonM: pasto.map((punto) => ({ ...punto })),
     fill: "#134e2a62",
     stroke: "#86efac",
-    hint: "Misma forma que el plano izquierdo del papel: rectángulo con bisel en la esquina inferior derecha.",
+    hint: "Casí rectángulo sobre 14,14 × 8,60 m; la esquina inferior derecha solo corta una puntita muy chica.",
+
   };
 
   return [pastoz, fuera, adentro16, adentro13];
