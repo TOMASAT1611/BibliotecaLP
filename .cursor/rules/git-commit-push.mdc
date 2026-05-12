@@ -1,0 +1,14 @@
+---
+description: Tras cambios de código, commitear y pushear para despliegue web
+alwaysApply: true
+---
+
+# Git: commit y push para ver en la web
+
+Cuando hagas cambios en este repo que el usuario deba ver en el sitio desplegado:
+
+1. Ejecutá `git status` y incluí los archivos relevantes (`git add -A` o selectivo).
+2. Hacé `git commit` con un mensaje claro en español o inglés coherente con el proyecto.
+3. Hacé `git push` a la rama remota habitual (`origin main`, o la rama en la que esté trabajando el usuario).
+
+No dejes cambios sólo en el disco si el objetivo era publicar una mejora. Si `git push` falla por red o credenciales, informalo y mostrá el comando que quedó pendiente.
