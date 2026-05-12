@@ -1006,9 +1006,9 @@ export default function EventDashboard() {
           : null}
 
           <p className="text-xs text-neutral-500">
-            Docx (.docx): si es una tabla con columnas <strong>nº de puesto · responsable · emprendimiento</strong>,
-            que Word exporte esa tabla con tabuladores entre celdas (lo habitual). También vale una persona por
-            línea, o formato{" "}
+            Docx (.docx): tabla con <strong>nº de puesto · titular del puesto · nombre del puesto</strong> (tabulador
+            entre columnas). Se guarda el titular en &quot;Nombre&quot; y el nombre del puesto en la columna de al
+            lado; ahí después sumás qué trae y el contacto cuando quieras. También vale una persona por línea o{" "}
             <strong>nombre · teléfono · qué trae</strong>.
           </p>
 
@@ -1016,9 +1016,9 @@ export default function EventDashboard() {
             <table className="min-w-full divide-y divide-neutral-800 text-sm">
               <thead className="bg-neutral-900/70 text-left text-xs uppercase tracking-wide text-neutral-400">
                 <tr>
-                  <th className="px-4 py-3">Nombre</th>
+                  <th className="px-4 py-3">Titular del puesto</th>
                   <th className="px-4 py-3">Contacto</th>
-                  <th className="px-4 py-3">Qué trae</th>
+                  <th className="px-4 py-3">Nombre del puesto · qué trae</th>
                   <th className="px-4 py-3">Confirmó</th>
                   <th className="px-4 py-3">Mesa</th>
                   <th className="px-4 py-3 text-right text-neutral-600">Acción</th>
@@ -1057,6 +1057,7 @@ export default function EventDashboard() {
                       <td className="px-4 py-3">
                         <textarea
                           className={`${inputClass} min-h-[70px] resize-y bg-neutral-900/40`}
+                          placeholder="Desde el Word: nombre del puesto · después sumás qué trae"
                           value={person.whatBrings ?? ""}
                           onChange={(e) =>
                             patchParticipant(person.id, {

@@ -34,19 +34,14 @@ function looksLikeStallTableHeader(cells: string[]): boolean {
 
 
   return (
-
-
-    /\bnombre\s+del\s+responsable\b/.test(joined)
-
-
-    && /\b(emprendimiento|nombre\s+del\s+emprendimiento)\b/.test(joined)
-
-
+    /\bnombre\s+del\s+(titular|responsable)\b/.test(joined) &&
+      /\b(emprendimiento|nombre\s+del\s+emprendimiento|nombre\s+del\s+puesto)\b/.test(joined)
   );
+
 
 }
 
-/** Una fila de listado institucional: Nº · Responsable · Emprendimiento. */
+/** Tabla institucional: nº · titular/responsable · nombre del emprendimiento/puesto. */
 
 
 function parseStallListRow(cells: string[]): Row | null {
@@ -61,20 +56,23 @@ function parseStallListRow(cells: string[]): Row | null {
   if (!/^\d+$/.test(stall)) return null;
 
 
-  const responsable = cells[1]?.trim() ?? "";
+  const titular = cells[1]?.trim() ?? "";
 
 
-  if (!responsable) return null;
+  if (!titular) return null;
 
 
-  const venture = cells.slice(2).join(" ").trim();
+  const nombrePuesto = cells.slice(2).join(" ").trim();
+
+
+  const tagPuesto = ` · puesto nº ${stall}`;
 
 
   return {
-    name: responsable,
+    name: titular,
     phone: null,
 
-    whatBrings: venture ? `[Puesto ${stall}] ${venture}` : `[Puesto ${stall}]`,
+    whatBrings: nombrePuesto ? nombrePuesto + tagPuesto : `Puesto nº ${stall}`.trim(),
   };
 
 
@@ -215,8 +213,9 @@ export async function POST(req: Request) {
       hint:
 
 
-        "Si importás una tabla institucional, que las columnas vengan separadas por tabulador en el .docx. " +
-        "También: una persona por línea, o Nombre[TAB] teléfono[TAB] qué trae.",
+        "Tabla institucional: nº[TAB] titular[TAB] nombre del puesto. El teléfono y los detalles de “qué trae” " +
+        "no vienen del Word — los completás después en la tabla. También sirve persona por línea o " +
+        "Nombre[TAB] teléfono[TAB] qué lleva.",
 
 
       participants: rows,
