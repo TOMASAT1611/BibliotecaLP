@@ -220,3 +220,37 @@ export function centroidPoly(poly: Pt[]): Pt {
   };
 
 }
+
+/** Recorta/expande el dibujo proporcionalmente al centro para que la caja sea ~targetWm × targetHm (metros). */
+export function scalePolyToEnvelope(poly: Pt[], targetWm: number, targetHm: number): Pt[] {
+  if (poly.length < 1 || !Number.isFinite(targetWm) || !Number.isFinite(targetHm)) return poly.slice();
+
+  const bb = boundingBox(poly);
+
+  let w = bb.maxX - bb.minX;
+  let h = bb.maxY - bb.minY;
+
+  if (!(w > 1e-9)) w = 0.25;
+
+  if (!(h > 1e-9)) h = 0.25;
+
+  const cx = (bb.minX + bb.maxX) / 2;
+  const cy = (bb.minY + bb.maxY) / 2;
+
+  const sx = Math.max(Math.abs(targetWm), 1e-6) / w;
+  const sy = Math.max(Math.abs(targetHm), 1e-6) / h;
+
+  return poly.map((p) => ({
+    x: cx + (p.x - cx) * sx,
+    y: cy + (p.y - cy) * sy,
+  }));
+}
+
+export function snapPolyToGrid(poly: Pt[], gridM: number): Pt[] {
+  const g = gridM > 0.01 ? gridM : 1.5;
+
+  return poly.map((p) => ({
+    x: snapCoord(p.x, g),
+    y: snapCoord(p.y, g),
+  }));
+}

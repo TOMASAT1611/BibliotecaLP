@@ -14,10 +14,14 @@ import {
 
   clampStallCenter,
 
+  snapCoord,
+  snapPolyToGrid,
+
   snapStallCenterXY,
   stallCorners,
+  scalePolyToEnvelope,
 } from "@/lib/geo";
-import type { Participant, PlanZone, Stall, Venue } from "@/lib/types";
+import type { Participant, PlanZone, Pt, Stall, Venue } from "@/lib/types";
 
 import { CATEGORY_COLOR } from "@/lib/types";
 import {
@@ -44,6 +48,15 @@ type Props = {
   onSelectStall: (id: string | null) => void;
 
   onUpsertStall: (stall: Stall) => void;
+
+  /** Permitir mover vértices y (opcional) redimensionar caja desde el mismo tab. */
+
+  polygonEditActive?: boolean;
+
+  /** Si lo pasás el interruptor aparece pegado al plano (debajo del croquis), muy visible. */
+  onPolygonEditActiveChange?: (next: boolean) => void;
+
+  onZonePolygonChange?: (zoneId: string, polygonM: Pt[]) => void;
 
 };
 
@@ -282,6 +295,10 @@ function ZoneCanvas({
 
   onUpsertStall,
 
+  polygonEditActive = false,
+
+  onZonePolygonChange,
+
 }: {
 
   zone: PlanZone;
@@ -299,11 +316,51 @@ function ZoneCanvas({
 
   onUpsertStall: (stall: Stall) => void;
 
+  polygonEditActive?: boolean;
+
+  onZonePolygonChange?: (zoneId: string, polygonM: Pt[]) => void;
+
 
 }) {
 
 
-  const poly = zone.polygonM;
+  const [editDraftPoly, setEditDraftPoly] = useState<Pt[] | null>(null);
+
+
+  const [vxDragIx, setVxDragIx] = useState<number | null>(null);
+
+
+  useEffect(() => {
+
+
+    setEditDraftPoly(null);
+
+
+    setVxDragIx(null);
+
+
+  }, [zone.id]);
+
+
+  useEffect(() => {
+
+
+    if (!polygonEditActive) {
+
+
+      setEditDraftPoly(null);
+
+
+      setVxDragIx(null);
+
+
+    }
+
+
+  }, [polygonEditActive]);
+
+
+  const poly = editDraftPoly ?? zone.polygonM;
 
 
   const invalidPoly = poly.length < 3;
@@ -423,7 +480,30 @@ function ZoneCanvas({
 
   }, []);
 
+  const gridM = venue.snapGridM;
+
+  const vertexScratchRef = useRef<Pt[] | null>(null);
+
   const onMouseMove = (e: React.MouseEvent) => {
+    if (polygonEditActive && vxDragIx !== null && vertexScratchRef.current) {
+      const m = clientToMeters(e.clientX, e.clientY);
+
+      if (!m) return;
+
+      const sx = snapCoord(m.x, gridM);
+      const sy = snapCoord(m.y, gridM);
+      const next = [...vertexScratchRef.current];
+
+      next[vxDragIx] = { x: sx, y: sy };
+      vertexScratchRef.current = next;
+      setEditDraftPoly(next);
+
+      return;
+
+    }
+
+
+
     if (!drag) return;
 
     const m = clientToMeters(e.clientX, e.clientY);
@@ -485,16 +565,49 @@ function ZoneCanvas({
   };
 
   const endDrag = () => {
+
+
+    if (polygonEditActive && vxDragIx !== null && vertexScratchRef.current && onZonePolygonChange) {
+
+
+      const done = snapPolyToGrid(
+        vertexScratchRef.current.map((punto) => ({ ...punto })),
+        gridM,
+
+      );
+
+
+      if (done.length >= 3) {
+
+
+        onZonePolygonChange(zone.id, done);
+
+
+      }
+
+
+    }
+
+
+
+    vertexScratchRef.current = null;
+
+
+    setVxDragIx(null);
+
+
+    setEditDraftPoly(null);
+
+
+
     if (drag && ghost && drag.id === ghost.id) {
 
 
       const stall = stallById(drag.id);
 
 
-      if (
-        stall &&
-        (ghost.xm !== stall.xm || ghost.ym !== stall.ym)
-      ) {
+
+      if (stall && (ghost.xm !== stall.xm || ghost.ym !== stall.ym)) {
 
 
         onUpsertStall({ ...stall, xm: ghost.xm, ym: ghost.ym });
@@ -514,7 +627,40 @@ function ZoneCanvas({
 
   };
 
+  const onVertexMouseDown = (vertexIndex: number) => (ev: React.MouseEvent) => {
+
+
+    if (!polygonEditActive || !onZonePolygonChange) return;
+
+
+    ev.preventDefault();
+
+
+    ev.stopPropagation();
+
+
+    onSelectStall(null);
+
+
+    vertexScratchRef.current = zone.polygonM.map((punto) => ({ ...punto }));
+
+
+    setEditDraftPoly(vertexScratchRef.current.map((punto) => ({ ...punto })));
+
+
+    setVxDragIx(vertexIndex);
+
+
+  };
+
+
   const onStallMouseDown = (stall: Stall) => (ev: React.MouseEvent) => {
+
+
+    if (polygonEditActive) return;
+
+
+
     ev.stopPropagation();
 
 
@@ -676,16 +822,50 @@ function ZoneCanvas({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 px-3 py-2 text-xs text-neutral-400">
         <span>
+
+
           Grillado cada{" "}
-          <strong className="text-neutral-200">{venue.snapGridM} m</strong> — la rueda del mouse sólo mueve la
-          página (no cambia zoom acá).
+
+
+          <strong className="text-neutral-200">{venue.snapGridM} m</strong> · la rueda del mouse sólo mueve la página
+          (sin zoom).
+
+
         </span>
 
-        <span className="text-neutral-500">
-          <kbd className="rounded border border-neutral-600 px-1 font-mono text-[10px] text-neutral-200">Supr</kbd>{" "}
-          / atrás borra mesa seleccionada ·{" "}
-          <kbd className="rounded border border-neutral-600 px-1 font-mono text-[10px] text-neutral-200">+</kbd>
-          agrega mesa
+
+
+        <span className={polygonEditActive && onZonePolygonChange ? "text-emerald-300/90" : "text-neutral-500"}>
+
+
+          {polygonEditActive && onZonePolygonChange ? (
+            <>
+              Modo forma: puntos cyan (arrastrá) · mesas pausadas · se guarda con el mismo auto-guardado del resto.
+
+
+            </>
+          ) : (
+            <>
+              <kbd className="rounded border border-neutral-600 px-1 font-mono text-[10px] text-neutral-200">Supr</kbd>
+
+
+              · atrás borra mesa ·
+
+
+
+
+              <kbd className="rounded border border-neutral-600 px-1 font-mono text-[10px] text-neutral-200">+</kbd>
+
+
+              agrega mesa
+
+
+            </>
+
+
+          )}
+
+
         </span>
       </div>
 
@@ -824,6 +1004,9 @@ function ZoneCanvas({
 
         />
 
+        <g pointerEvents={polygonEditActive ? "none" : "auto"}>
+
+
         {stalls.map((stallRaw) => {
           const gx = ghost?.id === stallRaw.id ? ghost.xm : stallRaw.xm;
 
@@ -917,6 +1100,70 @@ function ZoneCanvas({
 
         })}
 
+
+        </g>
+
+
+
+        {polygonEditActive && onZonePolygonChange ?
+          (<g>
+
+
+            {poly.map((vertex, vxIdx) => {
+
+
+              const activeVx = vxDragIx === vxIdx;
+
+
+              return (
+
+
+                <circle
+
+
+                  key={`${zone.id}-v-${vxIdx}`}
+
+
+                  cx={vertex.x}
+
+
+                  cy={vertex.y}
+
+
+                  r={activeVx ? 0.145 : 0.11}
+
+
+                  fill="#0f172a"
+
+
+                  stroke="#22d3ee"
+
+
+                  strokeWidth={0.034}
+
+
+                  style={{ cursor: activeVx ? "grabbing" : "grab", touchAction: "none" }}
+
+
+                  onMouseDown={onVertexMouseDown(vxIdx)}
+
+
+                />
+
+              );
+
+
+            })}
+
+
+          </g>)
+
+        :
+
+          null}
+
+
+
         <line
           x1={bbox.minX}
           y1={bbox.minY}
@@ -978,7 +1225,15 @@ export function FloorPlan(props: Props) {
 
     onUpsertStall,
 
+    polygonEditActive = false,
+
+    onPolygonEditActiveChange,
+
+    onZonePolygonChange,
+
   } = props;
+
+
   const activeZone = useMemo(() => {
     const z =
       venue.zones.find((candidato) => candidato.id === activeZoneId) ?? venue.zones[0];
@@ -986,9 +1241,134 @@ export function FloorPlan(props: Props) {
   }, [venue.zones, activeZoneId]);
 
 
+  const [envW, setEnvW] = useState("");
+
+
+  const [envH, setEnvH] = useState("");
+
+
+
+
+  /** Al cambiar el polígono (p. ej. al soltar un vértice) actualizamos la caja de texto de envolvente. */
+
+  useEffect(() => {
+
+
+    if (!polygonEditActive || !activeZone) return;
+
+
+    const bb = boundingBox(activeZone.polygonM);
+
+
+    setEnvW((bb.maxX - bb.minX).toFixed(2));
+
+
+    setEnvH((bb.maxY - bb.minY).toFixed(2));
+
+
+  }, [polygonEditActive, activeZone]);
+
+
+  function parseEnvelopeM(txt: string): number {
+
+
+    const v = Number.parseFloat(txt.trim().replace(",", "."));
+
+
+    return Number.isFinite(v) ? v : Number.NaN;
+
+
+  }
+
+
+  function applyEnvelopeProportional(): void {
+
+
+    if (!activeZone?.polygonM?.length || !onZonePolygonChange) return;
+
+
+    const wn = parseEnvelopeM(envW);
+
+
+    const hn = parseEnvelopeM(envH);
+
+
+    if (!(wn > 0.2) || !(hn > 0.2)) return;
+
+
+    const next = snapPolyToGrid(
+      scalePolyToEnvelope(activeZone.polygonM, wn, hn),
+      venue.snapGridM,
+
+    );
+
+
+    if (next.length >= 3) {
+
+
+      onZonePolygonChange(activeZone.id, next);
+
+
+    }
+
+
+  }
+
+
+  function syncEnvelopeFromDrawing(): void {
+
+
+    if (!activeZone?.polygonM?.length) return;
+
+
+    const bb = boundingBox(activeZone.polygonM);
+
+
+    setEnvW((bb.maxX - bb.minX).toFixed(2));
+
+
+    setEnvH((bb.maxY - bb.minY).toFixed(2));
+
+
+  }
+
+
+
+  const canEditOutline = polygonEditActive && !!onZonePolygonChange;
+
+
   return (
     <div className="space-y-6">
       <SchematicBiblioteca />
+
+      {onPolygonEditActiveChange ? (
+        <div className="rounded-2xl border-2 border-emerald-400/70 bg-emerald-950/60 px-4 py-4 shadow-lg shadow-black/40">
+          <label className="flex cursor-pointer flex-wrap items-start gap-3">
+            <input
+              type="checkbox"
+              checked={polygonEditActive}
+              onChange={(event) => onPolygonEditActiveChange(event.target.checked)}
+              className="mt-1 h-5 w-5 shrink-0 accent-emerald-400"
+            />
+            <span className="flex min-w-0 flex-1 flex-col gap-2 text-neutral-50 sm:min-w-[16rem]">
+              <span className="block text-base font-bold text-emerald-50">Editar forma (plaza / pasto)</span>
+              <span className="block text-sm leading-relaxed text-neutral-300">
+                Elegí la zona abajo, marcá acá, y aparecen los puntos cyan en el perímetro.
+                Sin marcar: solo lectura.
+              </span>
+            </span>
+          </label>
+          {!polygonEditActive ? (
+            <p className="mt-3 border-t border-white/15 pt-3 text-xs text-amber-200/95">
+              ¿No ves vértices? Marcá la casilla primero.
+            </p>
+          ) : (
+            <p className="mt-3 border-t border-white/15 pt-3 text-xs text-emerald-200">
+              Modo activo. Desmarcá para mover mesas.
+            </p>
+          )}
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         {venue.zones.map((z) => (
@@ -1037,6 +1417,49 @@ export function FloorPlan(props: Props) {
 
           </header>
 
+          {canEditOutline && activeZone ?
+            (<div className="flex flex-wrap items-end gap-3 rounded-xl border border-emerald-900/55 bg-emerald-950/25 px-4 py-3 text-sm text-neutral-200">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-neutral-500">Ancho caja (m)</span>
+                <input
+                  className="mt-1 w-28 rounded border border-neutral-600 bg-neutral-950 px-2 py-1 font-mono text-sm text-neutral-100"
+                  value={envW}
+                  onChange={(e) => setEnvW(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-neutral-500">Largo caja (m)</span>
+                <input
+                  className="mt-1 w-28 rounded border border-neutral-600 bg-neutral-950 px-2 py-1 font-mono text-sm text-neutral-100"
+                  value={envH}
+                  onChange={(e) => setEnvH(e.target.value)}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={applyEnvelopeProportional}
+                className="rounded-lg bg-emerald-600/85 px-4 py-2 text-xs font-semibold text-neutral-950 hover:bg-emerald-500"
+              >
+                Ajustar proporcional
+              </button>
+
+              <button
+                type="button"
+                onClick={syncEnvelopeFromDrawing}
+                className="rounded-lg border border-neutral-600 px-3 py-2 text-xs font-semibold text-neutral-300 hover:bg-neutral-800/60"
+              >
+                Leer del dibujo
+              </button>
+
+              <p className="w-full text-[11px] leading-snug text-neutral-500">
+                Escala el contorno respecto al centro para coincidir con la caja envolvente en metros (ej. 14,14 ×
+                8,60); podés afinar arrastrando puntos en el plano.
+              </p>
+            </div>)
+          : null}
+
           <ZoneCanvas
 
 
@@ -1059,6 +1482,12 @@ export function FloorPlan(props: Props) {
 
 
             onUpsertStall={onUpsertStall}
+
+
+            polygonEditActive={canEditOutline}
+
+
+            onZonePolygonChange={onZonePolygonChange}
 
 
           />

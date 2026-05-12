@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { AppState } from "@/lib/types";
-import {
-
-
-  loadState,
-
-  saveState,
-
-} from "@/lib/state-store";
+import { loadState, plannerStorageBackend, saveState } from "@/lib/state-store";
 
 
 import {
@@ -23,8 +16,13 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const state = await loadState();
 
+  const res = NextResponse.json(state);
 
-  return NextResponse.json(state);
+
+  res.headers.set("x-planner-storage", plannerStorageBackend());
+
+
+  return res;
 
 }
 
@@ -38,8 +36,13 @@ export async function PUT(req: Request) {
 
     await saveState(merged);
 
+    const res = NextResponse.json(merged);
 
-    return NextResponse.json(merged);
+
+    res.headers.set("x-planner-storage", plannerStorageBackend());
+
+
+    return res;
 
   } catch {
 

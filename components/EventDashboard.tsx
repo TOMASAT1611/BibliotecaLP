@@ -12,6 +12,8 @@ import type {
   AppState,
   Participant,
   PlanZone,
+  Pt,
+
   Stall,
   StallCategory,
   Venue,
@@ -283,12 +285,29 @@ export default function EventDashboard() {
 
   const zonesEditorReady = useRef(false);
 
+  const [storageBackendLabel, setStorageBackendLabel] = useState<string | null>(null);
+
+  const [polygonEditActive, setPolygonEditActive] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/state", { cache: "no-store" });
         if (!res.ok)
           throw new Error("No pudimos leer `/api/state`. ¿Corre `npm run dev` en esta carpeta?");
+
+        const mode = res.headers.get("x-planner-storage");
+
+
+        setStorageBackendLabel(
+          mode === "neon" ?
+            "Neon (Postgres)"
+
+          : mode === "filesystem" ?
+            "archivo local JSON"
+          : `desconocido (${mode ?? "?"})`,
+        );
+
 
         const json = (await res.json()) as AppState;
 
@@ -393,6 +412,84 @@ export default function EventDashboard() {
       }),
     );
   }
+
+
+  function patchZonePolygon(zoneId: string, polygonM: Pt[]) {
+
+
+    setState((prev) => {
+
+
+      if (!prev) return prev;
+
+
+      const zones = prev.venue.zones.map((zoneItem) =>
+        zoneItem.id === zoneId ?
+
+
+          { ...zoneItem, polygonM: polygonM.map((punto) => ({ ...punto })) }
+
+
+        : zoneItem,
+
+
+      );
+
+
+      const zHit = zones.find((candidato) => candidato.id === zoneId);
+
+
+      const polySafe =
+
+
+        zHit && zHit.polygonM.length >= 3 ? zHit.polygonM : ([] as Pt[]);
+
+
+      const stallsNext =
+        polySafe.length < 3 ?
+          prev.stalls
+
+        : prev.stalls.map((st) => {
+            if (st.zoneId !== zoneId) return st;
+
+            const clamped = clampStallCenter(
+              { x: st.xm, y: st.ym },
+              st.widthM,
+              st.depthM,
+              st.rotationDeg,
+              polySafe,
+            );
+
+            const snapped = snapStallCenterXY(
+              clamped.x,
+              clamped.y,
+              st.widthM,
+              st.depthM,
+              st.rotationDeg,
+              polySafe,
+              prev.venue.snapGridM,
+            );
+
+            return { ...st, xm: snapped.x, ym: snapped.y };
+          });
+
+
+      return migrateAppState({
+        ...prev,
+        venue: { ...prev.venue, zones },
+
+
+        stalls: stallsNext,
+
+
+      });
+
+
+    });
+
+
+  }
+
 
   function patchSelectedStall(partial: Partial<Stall>) {
     if (!selectedStall || !state) return;
@@ -744,9 +841,39 @@ export default function EventDashboard() {
 
           <p className="max-w-2xl text-sm text-neutral-400">
             Plano oscuro por zona (pasto, frente biblioteca y bandas dentro del galpón): {dimsSummary}
-            {""}.             Inventario local en {""}
-            <code className="rounded bg-neutral-950 px-2 py-[2px] text-sky-200">data/state.json</code>
-            {""} — todo se guarda solo mientras movés las mesas.
+
+
+            {""}. Persistencia {""}
+
+
+            <code className="rounded bg-neutral-950 px-2 py-[2px] text-sky-200">{
+
+
+              storageBackendLabel ?? "detectando..."
+
+
+            }</code>
+
+
+            {
+
+
+              storageBackendLabel === "Neon (Postgres)" ?
+                ""
+
+              : <> — archivo {""}<code className="text-neutral-400">data/state.json</code>; en prod {""}
+
+
+                  <code className="text-neutral-400">DATABASE_URL</code> Neon.</>
+
+
+            }
+
+
+
+            {""} Autoguardado unos ms después de cada cambio (mesas, contornos, personas).
+
+
           </p>
         </div>
 
@@ -785,7 +912,8 @@ export default function EventDashboard() {
       </nav>
 
       {tab === "plano" && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+        <div className="space-y-3">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
           <FloorPlan
             venue={state.venue}
             stalls={state.stalls}
@@ -795,15 +923,28 @@ export default function EventDashboard() {
             selectedStallId={selectedStallId}
             onSelectStall={setSelectedStallId}
             onUpsertStall={upsertStall}
+            polygonEditActive={polygonEditActive}
+            onPolygonEditActiveChange={setPolygonEditActive}
+            onZonePolygonChange={patchZonePolygon}
           />
 
           <div className="flex flex-col gap-4">
             <button
               type="button"
               onClick={() => void addStall()}
-              className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-neutral-950 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400"
+              disabled={polygonEditActive}
+              title={
+                polygonEditActive ?
+                  "Sacá modo «editar contorno» antes de crear mesas nuevas."
+                : undefined
+              }
+
+              className="rounded-xl bg-sky-500 px-4 py-3 text-sm font-semibold text-neutral-950 shadow-lg shadow-sky-500/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-45"
+
             >
-              + Nueva mesa (1,50 m de frente)
+              + Nueva mesa ({state.venue.stallWidthDefaultM.toFixed(1)} × {state.venue.stallDepthDefaultM.toFixed(1)} m por defecto)
+
+
             </button>
 
             {selectedStall ?
@@ -822,6 +963,7 @@ export default function EventDashboard() {
               </div>
             )}
           </div>
+        </div>
         </div>
       )}
 

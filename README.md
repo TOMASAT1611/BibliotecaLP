@@ -34,3 +34,10 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 Conectá este repo desde [Vercel](https://vercel.com/new): el `package.json` está en la **raíz**. **No** pongas Root Directory (dejalo vacío). Si antes lo tenías en `web`, **borrá ese valor** y redeploy. Si ves **404**, probá **Deployments → Redeploy**.
 
 Consultá también la documentación oficial de Next.js sobre [deployment](https://nextjs.org/docs/app/building-your-application/deploying).
+
+
+### Persistencia (Neon en producción)
+
+Sin variable de entorno, el estado vive en `data/state.json` en disco (útil en desarrollo). En **Vercel**, agregá **`DATABASE_URL`** con la connection string de un proyecto [Neon](https://neon.tech); la app guarda el JSON completo en Postgres (tabla `biblioteca_lp_state`, creada automáticamente si no existe). Opcional: script `neon-init.sql` en la raíz para crear la tabla a mano.
+
+
