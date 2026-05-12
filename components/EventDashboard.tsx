@@ -745,7 +745,7 @@ export default function EventDashboard() {
           <p className="max-w-2xl text-sm text-neutral-400">
             Plano oscuro por zona (pasto, frente biblioteca y bandas dentro del galpón): {dimsSummary}
             {""}.             Inventario local en {""}
-            <code className="rounded bg-neutral-950 px-2 py-[2px] text-sky-200">web/data/state.json</code>
+            <code className="rounded bg-neutral-950 px-2 py-[2px] text-sky-200">data/state.json</code>
             {""} — todo se guarda solo mientras movés las mesas.
           </p>
         </div>

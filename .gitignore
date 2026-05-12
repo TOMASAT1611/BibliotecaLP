@@ -42,3 +42,6 @@ next-env.d.ts
 
 # salón planner (generado al editar)
 /data/state.json
+
+# Antes la app vivía en web/; ignorar restos locales de esa carpeta
+/web/
