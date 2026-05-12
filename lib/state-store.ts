@@ -37,10 +37,19 @@ function hasDatabaseUrl(): boolean {
   return Boolean(process.env.DATABASE_URL?.trim());
 }
 
-export type PlannerStorageBackend = "neon" | "filesystem";
+/** Vercel (y similares) montan el bundle en `/var/task`; escribir `data/state.json` falla con EROFS. */
+function canWriteStateFilesystem(): boolean {
+  return !(process.env.VERCEL ?? "").trim();
+}
+
+export type PlannerStorageBackend = "neon" | "filesystem" | "neon_required";
 
 export function plannerStorageBackend(): PlannerStorageBackend {
-  return hasDatabaseUrl() ? "neon" : "filesystem";
+  if (hasDatabaseUrl()) return "neon";
+
+  if (!canWriteStateFilesystem()) return "neon_required";
+
+  return "filesystem";
 }
 
 export function getDefaultState(): AppState {
@@ -199,11 +208,20 @@ export async function saveState(next: AppState): Promise<void> {
       return;
     } catch (e) {
 
+      if (!canWriteStateFilesystem())
+        throw e instanceof Error ?
+            e
+
+          : new Error(String(e));
 
       console.warn("[biblioteca-lp]", "Neon guardado falló → backup en archivo:", e);
-
-
     }
+  }
+
+  if (!canWriteStateFilesystem()) {
+    throw new Error(
+      "En este host (ej. Vercel) no se puede usar archivo local. Configurá DATABASE_URL en el proyecto Vercel con la connection string de Neon.",
+    );
   }
 
 

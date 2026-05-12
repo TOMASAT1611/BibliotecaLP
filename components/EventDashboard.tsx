@@ -308,6 +308,10 @@ export default function EventDashboard() {
 
           : mode === "filesystem" ?
             "archivo local JSON"
+
+          : mode === "neon_required" ?
+            "hay que cargar Neon (DATABASE_URL)"
+
           : `desconocido (${mode ?? "?"})`,
         );
 
@@ -1129,6 +1133,11 @@ export default function EventDashboard() {
 
               storageBackendLabel === "Neon (Postgres)" ?
                 ""
+
+              : storageBackendLabel === "hay que cargar Neon (DATABASE_URL)" ?
+                <> En Vercel el disco es solo lectura: agregá {""}
+
+                  <code className="text-neutral-400">DATABASE_URL</code> (Neon) en Variables del proyecto.{""}</>
 
               : <> — archivo {""}<code className="text-neutral-400">data/state.json</code>; en prod {""}
 
