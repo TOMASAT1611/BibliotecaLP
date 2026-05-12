@@ -1006,8 +1006,10 @@ export default function EventDashboard() {
           : null}
 
           <p className="text-xs text-neutral-500">
-            En Word podés tener una persona por línea (solo nombre), o columnas separadas por tab:
-            nombre, teléfono, qué trae al puesto.
+            Docx (.docx): si es una tabla con columnas <strong>nº de puesto · responsable · emprendimiento</strong>,
+            que Word exporte esa tabla con tabuladores entre celdas (lo habitual). También vale una persona por
+            línea, o formato{" "}
+            <strong>nombre · teléfono · qué trae</strong>.
           </p>
 
           <div className="overflow-x-auto rounded-2xl border border-neutral-800 bg-neutral-950/40">
