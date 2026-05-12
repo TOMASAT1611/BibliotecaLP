@@ -27,8 +27,10 @@ import type { Participant, PlanZone, Pt, Stall, Venue } from "@/lib/types";
 
 import { CATEGORY_COLOR } from "@/lib/types";
 import {
-  ADENTRO_BANDA_MESAS_16_M,
-  ADENTRO_BANDA_TOTAL_16_M,
+  ADENTRO_BANDA_MESAS_M,
+  ADENTRO_BANDA_TAIL_M,
+  ADENTRO_BANDA_TOTAL_M,
+  ADENTRO_MUSICA_EQUIPO_M,
   AFUERA_MESAS_UTIL_M,
   FACHADA_TOTAL_M,
   PLAJON_ANCHO_INTERIOR_M,
@@ -260,15 +262,17 @@ function SchematicBiblioteca() {
         {/* Leyenda numérica (mismas cifras que el plano interactivo) */}
         <g transform="translate(340,230)">
           <text x="0" y="0" fill="#64748b" fontSize="9">
-            Coherentes con medidas en metros: pasto 14,14 × 8,60 · afuera {AFUERA_MESAS_UTIL_M} m · adentro{" "}
-            {ADENTRO_BANDA_MESAS_16_M}/{ADENTRO_BANDA_TOTAL_16_M} m · ancho salón {PLAJON_ANCHO_INTERIOR_M} m
+            Coherentes con medidas en metros: pasto 14,14 × 8,60 · afuera {AFUERA_MESAS_UTIL_M} m · banda interior{" "}
+            {ADENTRO_BANDA_TOTAL_M} m ({ADENTRO_BANDA_MESAS_M} mesas · {ADENTRO_MUSICA_EQUIPO_M} música ·{" "}
+            {ADENTRO_BANDA_TAIL_M} equipo) · ancho salón {PLAJON_ANCHO_INTERIOR_M} m
           </text>
         </g>
       </svg>
 
       <p className="mt-3 max-w-xl text-[11px] leading-relaxed text-neutral-400">
-        En el plano interactivo abajo tomamos las mismas medidas; la banda de 16,50 m es un rectángulo completo y
-        las mesas van solo en los primeros {ADENTRO_BANDA_MESAS_16_M} m (el resto queda sombreado como equipo).{" "}
+        En el plano interactivo la banda interior mide {ADENTRO_BANDA_TOTAL_M} m en total: los primeros{" "}
+        {ADENTRO_BANDA_MESAS_M} m son para mesas; luego {ADENTRO_MUSICA_EQUIPO_M} m sombreados como música/equipo;
+        el tramo final ({ADENTRO_BANDA_TAIL_M} m) equipo y paso.{" "}
         <a
           href={MAPSEARCH_LOS_POLVORINES}
           target="_blank"
@@ -810,12 +814,24 @@ function ZoneCanvas({
     );
   }
 
-  const adentro16Equipo =
-    zone.id === "adentro_fila16"
-      ? {
-          mesasHastaX: bbox.minX + ADENTRO_BANDA_MESAS_16_M,
-          w: Math.max(1e-9, bbox.maxX - (bbox.minX + ADENTRO_BANDA_MESAS_16_M)),
-        }
+  const adentro16Layout =
+    zone.id === "adentro_fila16" && spanW > 1e-9
+      ? (() => {
+          const ux = spanW / ADENTRO_BANDA_TOTAL_M;
+
+
+          const x0 = bbox.minX;
+
+
+          const mesasEnd = x0 + ADENTRO_BANDA_MESAS_M * ux;
+
+
+          const musEnd = mesasEnd + ADENTRO_MUSICA_EQUIPO_M * ux;
+
+
+          return { mesasEnd, musEnd, maxX: bbox.maxX };
+
+        })()
       : null;
 
   return (
@@ -954,27 +970,78 @@ function ZoneCanvas({
         ) : null}
 
 
-        {adentro16Equipo ? (
-          <g opacity={0.8}>
+        {adentro16Layout ? (
+          <g opacity={0.9}>
             <rect
-              x={adentro16Equipo.mesasHastaX}
+              x={adentro16Layout.musEnd}
+
+
               y={bbox.minY}
-              width={adentro16Equipo.w}
+              width={Math.max(1e-9, adentro16Layout.maxX - adentro16Layout.musEnd)}
+
+
               height={prof}
               fill="#7f1d1d44"
               stroke="#f87171"
               strokeWidth={0.03}
               strokeDasharray="0.1 0.08"
             />
+
             <text
-              x={adentro16Equipo.mesasHastaX + adentro16Equipo.w / 2}
+              x={adentro16Layout.musEnd + (adentro16Layout.maxX - adentro16Layout.musEnd) / 2}
+
+
               y={bbox.minY + prof / 2}
               fill="#fecaca"
+
+
               fontSize={0.12}
               textAnchor="middle"
               dominantBaseline="middle"
             >
-              equipo
+
+
+              equipo / paso
+
+            </text>
+
+            <rect
+              x={adentro16Layout.mesasEnd}
+
+
+              y={bbox.minY}
+
+
+              width={Math.max(1e-9, adentro16Layout.musEnd - adentro16Layout.mesasEnd)}
+
+
+              height={prof}
+
+
+              fill="#4c1d9544"
+
+
+              stroke="#c084fc"
+              strokeWidth={0.03}
+              strokeDasharray="0.08 0.06"
+            />
+
+
+            <text
+              x={adentro16Layout.mesasEnd + (adentro16Layout.musEnd - adentro16Layout.mesasEnd) / 2}
+
+
+              y={bbox.minY + prof / 2}
+              fill="#e9d5ff"
+
+
+              fontSize={0.105}
+              textAnchor="middle"
+              dominantBaseline="middle"
+
+
+            >
+              música · sonido
             </text>
           </g>
         ) : null}

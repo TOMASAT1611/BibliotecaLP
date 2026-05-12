@@ -289,6 +289,9 @@ export default function EventDashboard() {
 
   const [polygonEditActive, setPolygonEditActive] = useState(false);
 
+  const [persistMsg, setPersistMsg] = useState<string | null>(null);
+
+  const [persistBusy, setPersistBusy] = useState(false);
   useEffect(() => {
     (async () => {
       try {
@@ -797,8 +800,243 @@ export default function EventDashboard() {
 
 
       setImportMsg("No se pudo leer el archivo (¿red cortada?).");
+
+
     }
+
+
   }
+
+
+
+  async function persistNow(): Promise<void> {
+
+
+    if (!state) return;
+
+
+    setPersistBusy(true);
+
+
+    setPersistMsg(null);
+
+
+    try {
+
+
+      const res = await fetch("/api/state", {
+
+
+        method: "PUT",
+
+
+        headers: { "Content-Type": "application/json" },
+
+
+        body: JSON.stringify(state),
+
+
+      });
+
+
+      if (!res.ok) {
+
+
+        setPersistMsg(`No se pudo guardar (HTTP ${res.status}).`);
+
+        return;
+
+      }
+
+
+
+      const body = (await res.json()) as AppState;
+
+
+      const merged = migrateAppState(body);
+
+
+      setState(merged);
+
+
+
+      zonesEditorReady.current = false;
+
+
+
+      setPersistMsg(
+
+
+
+        `Guardado OK · ${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}`,
+
+
+
+      );
+
+
+    } catch {
+
+
+
+      setPersistMsg("Error de red al guardar.");
+
+
+
+    } finally {
+
+
+      setPersistBusy(false);
+
+
+
+    }
+
+
+
+  }
+
+
+
+  function exportPlanJson(): void {
+
+
+    if (!state) return;
+
+
+    const bundle = {
+
+
+      format: "BibliotecaLP-plan",
+
+      version: 1,
+
+      exportedAt: new Date().toISOString(),
+
+
+
+      state,
+
+
+    };
+
+
+
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+
+
+
+    const url = URL.createObjectURL(blob);
+
+
+
+    const anchor = document.createElement("a");
+
+
+
+    anchor.href = url;
+
+
+    anchor.download = `biblioteca-lp-plano-${new Date().toISOString().slice(0, 10)}.json`;
+
+
+    anchor.click();
+
+
+    URL.revokeObjectURL(url);
+
+
+  }
+
+
+
+  async function importPlanJsonFile(ev: ChangeEvent<HTMLInputElement>): Promise<void> {
+
+
+    const file = ev.target.files?.[0];
+
+
+
+    ev.target.value = "";
+
+
+
+    if (!file) return;
+
+
+    try {
+
+
+      const txt = await file.text();
+
+
+      const parsed = JSON.parse(txt) as unknown;
+
+
+
+      const rec =
+
+
+
+        parsed && typeof parsed === "object" && parsed !== null ?
+          (parsed as Record<string, unknown>)
+
+
+
+        : null;
+
+
+
+      const inner =
+
+
+
+        rec && "state" in rec && typeof rec.state === "object" && rec.state !== null ?
+          rec.state
+
+
+
+        : parsed;
+
+
+
+      const next = migrateAppState(inner as Partial<AppState>);
+
+
+
+      setState(next);
+
+
+
+      zonesEditorReady.current = false;
+
+
+
+      setPersistMsg(
+
+
+
+        "Plano cargado desde el archivo. Si usás servidor o Neon, tocá «Guardar ahora» para fijarlo.",
+
+
+
+      );
+
+    } catch {
+
+
+
+      setPersistMsg("El archivo no es un JSON de plano válido.");
+
+
+
+    }
+
+
+
+  }
+
+
 
   const confirmedCount = state ? state.participants.filter((p) => p.confirmed).length : 0;
 
@@ -871,19 +1109,51 @@ export default function EventDashboard() {
 
 
 
-            {""} Autoguardado unos ms después de cada cambio (mesas, contornos, personas).
+            {""} Autoguardado unos ms después de cada cambio. Usá <strong className="text-neutral-300">Guardar ahora</strong>{" "}
+            (arriba) si querés asegurarte antes de recargar; también podés Exportar/importar JSON del mismo plano.
 
 
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 text-xs text-neutral-300">
-          <StatPill label="Mesas" value={`#${state.stalls.length}`} />
-          <StatPill label="Personas" value={`#${state.participants.length}`} />
-          <StatPill
-            label="Confirmaron"
-            value={`${confirmedCount}/${Math.max(state.participants.length, 1)}`}
-          />
+        <div className="flex min-w-[12rem] flex-col items-stretch gap-3 md:items-end">
+          <div className="flex flex-wrap justify-end gap-2 text-xs text-neutral-300">
+            <StatPill label="Mesas" value={`#${state.stalls.length}`} />
+            <StatPill label="Personas" value={`#${state.participants.length}`} />
+            <StatPill
+              label="Confirmaron"
+              value={`${confirmedCount}/${Math.max(state.participants.length, 1)}`}
+            />
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              disabled={persistBusy}
+              onClick={() => void persistNow()}
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-neutral-950 shadow-md shadow-emerald-900/30 hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-65"
+            >
+              Guardar ahora
+            </button>
+            <button
+              type="button"
+              onClick={() => exportPlanJson()}
+              className="rounded-xl border border-sky-500/45 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/18"
+            >
+              Exportar plano
+            </button>
+            <label className="cursor-pointer rounded-xl border border-neutral-600 bg-neutral-900/55 px-4 py-2 text-xs font-semibold text-neutral-100 hover:bg-neutral-800/65">
+              Importar plano
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => void importPlanJsonFile(e)}
+              />
+            </label>
+          </div>
+          {persistMsg ?
+            (<p className="max-w-[22rem] text-right text-[11px] leading-snug text-neutral-400">{persistMsg}</p>)
+          : null}
         </div>
       </header>
 

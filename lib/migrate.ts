@@ -5,7 +5,16 @@ import {
 } from "./geo";
 
 import type { AppState, Participant, Stall, Venue } from "./types";
-import { defaultPlanZones, zonaPastoChamferM } from "./zones-default";
+
+import {
+
+
+  ADENTRO_BANDA_TOTAL_M,
+
+  defaultPlanZones,
+
+} from "./zones-default";
+
 
 function newSid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -35,22 +44,27 @@ function emptyVenue(): Venue {
 
 
 /**
- * Reemplaza la plaza “pasto” si tiene el bisel viejo muy grande (~40 % alto en el borde derecho)
- * por la forma nueva proporcional manteniendo el mismo bounding box guardado (mesas/coords).
+ * Guardados con banda «adentro_fila16» de ~16,5 m: el croquis pasa a 22,5 m estirando solo el eje X local.
  */
-function repairHugePastoChamfer(venue: Venue): Venue {
 
 
-  const ix = venue.zones.findIndex((z) => z.id === "pasto");
+function widenLegacyAdentro16Zone(venue: Venue): Venue {
+
+
+  const ix = venue.zones.findIndex((z) => z.id === "adentro_fila16");
 
 
   if (ix < 0) return venue;
 
 
-  const poly = venue.zones[ix]!.polygonM;
+  const zone = venue.zones[ix]!;
 
 
-  if (poly.length !== 5) return venue;
+  const poly = zone.polygonM;
+
+
+  if (!Array.isArray(poly) || poly.length !== 4) return venue;
+
 
 
   const bb = boundingBox(poly);
@@ -59,50 +73,39 @@ function repairHugePastoChamfer(venue: Venue): Venue {
   const spanX = bb.maxX - bb.minX;
 
 
-  const spanY = bb.maxY - bb.minY;
-
-
-  if (!(spanX > 0.08 && spanY > 0.08)) return venue;
-
-
-  const p2 = poly[2];
-
-
-  if (!p2) return venue;
+  if (!(spanX > 0.08)) return venue;
 
 
 
-  /** Fracción de alto de caja desde el vértice 2 hasta el borde inferior (bisel viejo ≈ 0,6). */
+  /** Template viejo paralelo nominal 16,5 m antes de llevar texto a 22,5 totales en papel. */
 
 
-  const stripBelowFrac = (bb.maxY - p2.y) / spanY;
-
-
-  if (!(stripBelowFrac > 0.38)) return venue;
+  if (Math.abs(spanX - 16.5) > 0.55) return venue;
 
 
 
-  const fresh = zonaPastoChamferM();
+  const scale = ADENTRO_BANDA_TOTAL_M / spanX;
 
 
-  const bf = boundingBox(fresh);
+  const x0 = bb.minX;
 
 
-  const wF = bf.maxX - bf.minX;
+  const stretched = poly.map((p) => ({
 
 
-  const hF = bf.maxY - bf.minY;
+    x: x0 + (p.x - x0) * scale,
 
 
-  const scaled = fresh.map((p) => ({
-    x: bb.minX + ((p.x - bf.minX) / wF) * spanX,
 
-    y: bb.minY + ((p.y - bf.minY) / hF) * spanY,
+    y: p.y,
+
   }));
 
 
-  const next = venue.zones.map((zone, zi) =>
-    zi === ix ? { ...zone, polygonM: scaled } : zone,
+  const next = venue.zones.map((candidate, zi) =>
+    zi === ix ? { ...candidate, polygonM: stretched } : candidate,
+
+
   );
 
 
@@ -110,6 +113,9 @@ function repairHugePastoChamfer(venue: Venue): Venue {
 
 
 }
+
+
+
 
 /** Descarta polígonos rotos o demasiado chicos; sin ninguna zona válida vuelve al croquis por defecto. */
 function dropInvalidZones(venue: Venue): Venue {
@@ -765,7 +771,7 @@ export function migrateAppState(raw: unknown): AppState {
 
     : [];
 
-  const venueFixed = repairHugePastoChamfer(dropInvalidZones(venue));
+  const venueFixed = widenLegacyAdentro16Zone(dropInvalidZones(venue));
 
   return {
 

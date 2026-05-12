@@ -1,10 +1,29 @@
 import type { PlanZone, Pt } from "./types";
 
-/** Lado largo paralelo donde van mesas hasta 13,50 m y luego equipo (dibujo papel). */
-export const ADENTRO_BANDA_TOTAL_16_M = 16.5;
+/** Largo total en planta de la banda interior paralela a la pared larga (comida · música · equipo). */
+export const ADENTRO_BANDA_TOTAL_M = 22.5;
 
-/** Tramo con mesas sobre la banda anterior; el resto queda equipo. */
-export const ADENTRO_BANDA_MESAS_16_M = 13.5;
+
+/** Mesas (comida) sobre esa banda, en metros. */
+export const ADENTRO_BANDA_MESAS_M = 16.5;
+
+
+/** Tramo para música / sonido / cableado inmediatamente detrás de las mesas. */
+export const ADENTRO_MUSICA_EQUIPO_M = 2.2;
+
+
+/** Equipo y paso después de música (dentro del mismo rectángulo de 22,50 m). */
+export const ADENTRO_BANDA_TAIL_M =
+  ADENTRO_BANDA_TOTAL_M - ADENTRO_BANDA_MESAS_M - ADENTRO_MUSICA_EQUIPO_M;
+
+/** Alias histórico para leyendas ya usadas en código. */
+export const ADENTRO_BANDA_TOTAL_16_M = ADENTRO_BANDA_TOTAL_M;
+
+
+/** Alias: tramo ocupado por mesas (16,50 m). */
+
+
+export const ADENTRO_BANDA_MESAS_16_M = ADENTRO_BANDA_MESAS_M;
 
 /** Anchura típica del salón marcada como “ANCHO 10,30” en tu plano derecho (referencia geométrica). */
 export const PLAJON_ANCHO_INTERIOR_M = 10.3;
@@ -39,6 +58,7 @@ export function zonaPastoChamferM(): Pt[] {
     { x: W - dx, y: H },
     { x: 0, y: H },
   ];
+
 }
 
 /** Referencia textual de fachada; la franja no-mesas sale por diferencia hasta 8,50 m de mesas. */
@@ -53,18 +73,23 @@ const PROF_MESAS_FUERA = 4;
 
 const PROF_ADENTRO = 4;
 
-const LADO_MESAS_INTERIOR_LARGO_PARALELO_M = ADENTRO_BANDA_TOTAL_16_M;
 
-const LADO_MESAS_PARED_CORTA_M = ADENTRO_BANDA_MESAS_16_M;
+
+const LADO_MESAS_INTERIOR_LARGO_PARALELO_M = ADENTRO_BANDA_TOTAL_M;
+
+
 
 const LADO_MESAS_PARED_13_M = 13.5;
 
 export function defaultPlanZones(): PlanZone[] {
   const pasto = zonaPastoChamferM();
 
+
   const x0 = FRANJA_PUERTA_PORTON;
 
+
   const x1 = FACHADA_TOTAL_M;
+
 
   const fuera: PlanZone = {
     id: "fuera_facade",
@@ -81,10 +106,14 @@ export function defaultPlanZones(): PlanZone[] {
       `Sobre los ${FACHADA_TOTAL_M} m de frente (${FRANJA_PUERTA_PORTON.toFixed(2)} m sin mesas puerta/portón — ${AFUERA_MESAS_UTIL_M} m solo mesas, como marcás arriba en el papel).`,
   };
 
-  /** Polígono 0→16,50 × profundidad: mesas ocupando los primeros 13,50 m hacia dentro del recinto. */
+  /** Polígono 0→22,50 m × profundo interior: primeros 16,50 mesas · 2,20 música · resto equipo. */
   const adentro16: PlanZone = {
     id: "adentro_fila16",
-    name: "Mesas adentro — pared larga (16,50 m totales sobre la banda dibujada)",
+    name:
+
+
+      `Mesas adentro — pared larga (${ADENTRO_BANDA_TOTAL_M} m · ${ADENTRO_BANDA_MESAS_M} mesas · ${ADENTRO_MUSICA_EQUIPO_M} m música)`,
+
     polygonM: [
       { x: 0, y: 0 },
       { x: LADO_MESAS_INTERIOR_LARGO_PARALELO_M, y: 0 },
@@ -96,8 +125,12 @@ export function defaultPlanZones(): PlanZone[] {
     ],
     fill: "#42200655",
     stroke: "#fcd34d",
-    hint: `Los primeros ${LADO_MESAS_PARED_CORTA_M} m (desde donde arranca la marca en papel) llevan mesas; del ${LADO_MESAS_PARED_CORTA_M} al ${ADENTRO_BANDA_TOTAL_16_M} m solo equipo / paso.`,
+    hint:
+
+
+      `Los primeros ${ADENTRO_BANDA_MESAS_M} m llevan mesas de comida; después ${ADENTRO_MUSICA_EQUIPO_M} m marcados como «música/equipo» en el dibujo sombreado; los últimos ${ADENTRO_BANDA_TAIL_M} m completan el rectángulo hasta ${ADENTRO_BANDA_TOTAL_M} m (equipo · paso).`,
   };
+
 
   const adentro13: PlanZone = {
     id: "adentro_fila135",
@@ -124,5 +157,7 @@ export function defaultPlanZones(): PlanZone[] {
 
   };
 
+
   return [pastoz, fuera, adentro16, adentro13];
+
 }
