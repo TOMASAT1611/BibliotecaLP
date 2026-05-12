@@ -16,6 +16,46 @@ import {
 } from "./zones-default";
 
 
+
+function sanitizePolygonM(raw: unknown): { x: number; y: number }[] {
+
+
+  if (!Array.isArray(raw)) return [];
+
+
+  const out: { x: number; y: number }[] = [];
+
+
+  for (const p of raw) {
+
+
+    if (!p || typeof p !== "object") continue;
+
+
+
+    const x = Number((p as { x: unknown }).x);
+
+
+    const y = Number((p as { y: unknown }).y);
+
+
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+
+
+    out.push({ x, y });
+
+
+  }
+
+
+  return out;
+
+
+}
+
+
+
 function newSid(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto)
     return crypto.randomUUID();
@@ -699,11 +739,7 @@ export function migrateAppState(raw: unknown): AppState {
 
 
 
-          polygonM: candidate.polygonM.map((point) => ({ ...point })),
-
-
-
-
+          polygonM: sanitizePolygonM(candidate.polygonM),
 
 
         }))

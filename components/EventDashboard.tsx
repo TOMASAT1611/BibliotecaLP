@@ -839,10 +839,29 @@ export default function EventDashboard() {
       });
 
 
+      const rawText = await res.text();
+
+
       if (!res.ok) {
 
 
-        setPersistMsg(`No se pudo guardar (HTTP ${res.status}).`);
+        let hint = "";
+
+        try {
+
+          const ej = JSON.parse(rawText) as { error?: string; detail?: string };
+
+          hint = ej.detail?.trim() ?? ej.error?.trim() ?? "";
+
+        } catch {
+
+          hint = rawText.trim().slice(0, 200);
+
+        }
+
+        const suffix = hint ? ` · ${hint.slice(0, 280)}` : "";
+
+        setPersistMsg(`No se pudo guardar (HTTP ${res.status})${suffix}`);
 
         return;
 
@@ -850,10 +869,22 @@ export default function EventDashboard() {
 
 
 
-      const body = (await res.json()) as AppState;
+      let bodyJson: unknown;
+
+      try {
+
+        bodyJson = JSON.parse(rawText);
+
+      } catch {
+
+        setPersistMsg("Respuesta rara del servidor al guardar (no era JSON).");
+
+        return;
+
+      }
 
 
-      const merged = migrateAppState(body);
+      const merged = migrateAppState(bodyJson as Partial<AppState>);
 
 
       setState(merged);
