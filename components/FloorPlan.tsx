@@ -18,6 +18,8 @@ import {
   snapPolyToGrid,
 
   snapStallCenterXY,
+
+  ZONE_OUTLINE_SNAP_M,
   stallCorners,
   scalePolyToEnvelope,
 } from "@/lib/geo";
@@ -480,7 +482,10 @@ function ZoneCanvas({
 
   }, []);
 
-  const gridM = venue.snapGridM;
+  /** Perímetro de zona (vértices): sin grilla 1,5 m — igual que mesas usarían distinto snap. */
+
+
+  const gridOutline = ZONE_OUTLINE_SNAP_M;
 
   const vertexScratchRef = useRef<Pt[] | null>(null);
 
@@ -490,8 +495,8 @@ function ZoneCanvas({
 
       if (!m) return;
 
-      const sx = snapCoord(m.x, gridM);
-      const sy = snapCoord(m.y, gridM);
+      const sx = snapCoord(m.x, gridOutline);
+      const sy = snapCoord(m.y, gridOutline);
       const next = [...vertexScratchRef.current];
 
       next[vxDragIx] = { x: sx, y: sy };
@@ -572,7 +577,7 @@ function ZoneCanvas({
 
       const done = snapPolyToGrid(
         vertexScratchRef.current.map((punto) => ({ ...punto })),
-        gridM,
+        gridOutline,
 
       );
 
@@ -840,7 +845,8 @@ function ZoneCanvas({
 
           {polygonEditActive && onZonePolygonChange ? (
             <>
-              Modo forma: puntos cyan (arrastrá) · mesas pausadas · se guarda con el mismo auto-guardado del resto.
+              Modo forma: puntos cyan (no clavan en grilla de 1,5 m) · los metros de la caja coinciden con lo escrito
+              · mesas pausadas.
 
 
             </>
@@ -1247,14 +1253,16 @@ export function FloorPlan(props: Props) {
   const [envH, setEnvH] = useState("");
 
 
+  /** Salir del par ancho+largo sin aplicar híbrido medio (solo al salir del recuadro). */
 
 
+  const envelopeInputsRef = useRef<HTMLDivElement>(null);
   /** Al cambiar el polígono (p. ej. al soltar un vértice) actualizamos la caja de texto de envolvente. */
 
   useEffect(() => {
 
 
-    if (!polygonEditActive || !activeZone) return;
+    if (!polygonEditActive || !activeZone?.polygonM?.length) return;
 
 
     const bb = boundingBox(activeZone.polygonM);
@@ -1266,7 +1274,7 @@ export function FloorPlan(props: Props) {
     setEnvH((bb.maxY - bb.minY).toFixed(2));
 
 
-  }, [polygonEditActive, activeZone]);
+  }, [polygonEditActive, activeZone?.id, activeZone?.polygonM]);
 
 
   function parseEnvelopeM(txt: string): number {
@@ -1296,11 +1304,8 @@ export function FloorPlan(props: Props) {
     if (!(wn > 0.2) || !(hn > 0.2)) return;
 
 
-    const next = snapPolyToGrid(
-      scalePolyToEnvelope(activeZone.polygonM, wn, hn),
-      venue.snapGridM,
-
-    );
+    /** Sin snap a cuadrícula de mesas: si no las medidas escritas ≠ caja dibujada. */
+    const next = scalePolyToEnvelope(activeZone.polygonM, wn, hn);
 
 
     if (next.length >= 3) {
@@ -1310,6 +1315,24 @@ export function FloorPlan(props: Props) {
 
 
     }
+
+
+  }
+
+
+  /** No aplicamos al saltar sólo entre los dos números; sí al clic en botón o fuera del recuadro. */
+
+
+  function onEnvelopeInputBlur(ev: React.FocusEvent<HTMLInputElement>): void {
+
+
+    const next = ev.relatedTarget;
+
+
+    if (next instanceof Node && envelopeInputsRef.current?.contains(next)) return;
+
+
+    applyEnvelopeProportional();
 
 
   }
@@ -1418,13 +1441,22 @@ export function FloorPlan(props: Props) {
           </header>
 
           {canEditOutline && activeZone ?
-            (<div className="flex flex-wrap items-end gap-3 rounded-xl border border-emerald-900/55 bg-emerald-950/25 px-4 py-3 text-sm text-neutral-200">
+            (<div
+              ref={envelopeInputsRef}
+
+
+              className="flex flex-wrap items-end gap-3 rounded-xl border border-emerald-900/55 bg-emerald-950/25 px-4 py-3 text-sm text-neutral-200"
+            >
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-neutral-500">Ancho caja (m)</span>
                 <input
                   className="mt-1 w-28 rounded border border-neutral-600 bg-neutral-950 px-2 py-1 font-mono text-sm text-neutral-100"
                   value={envW}
                   onChange={(e) => setEnvW(e.target.value)}
+                  onBlur={onEnvelopeInputBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
                 />
               </div>
 
@@ -1434,6 +1466,10 @@ export function FloorPlan(props: Props) {
                   className="mt-1 w-28 rounded border border-neutral-600 bg-neutral-950 px-2 py-1 font-mono text-sm text-neutral-100"
                   value={envH}
                   onChange={(e) => setEnvH(e.target.value)}
+                  onBlur={onEnvelopeInputBlur}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  }}
                 />
               </div>
 
@@ -1454,8 +1490,8 @@ export function FloorPlan(props: Props) {
               </button>
 
               <p className="w-full text-[11px] leading-snug text-neutral-500">
-                Escala el contorno respecto al centro para coincidir con la caja envolvente en metros (ej. 14,14 ×
-                8,60); podés afinar arrastrando puntos en el plano.
+                Cambiás ancho/largo y al salir del campo (Enter o clic afuera) se aplica el proporcional desde el centro;
+                también &quot;Ajustar proporcional&quot;. El perímetro no usa la grilla de 1,5 m de las mesas.
               </p>
             </div>)
           : null}

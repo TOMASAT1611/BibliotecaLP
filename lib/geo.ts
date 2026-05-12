@@ -85,10 +85,12 @@ export function clampStallCenter(
   return center;
 }
 
-/** Redondea a múltiplos de `gridM` (ej. 1,5 m para cada mesa). */
+/** Redondea a múltiplos de `gridM`. Si `gridM`≈0, no mueve la coordenada (útil para el perímetro de zona). */
 export function snapCoord(value: number, gridM: number): number {
-  const g = gridM > 0.01 ? gridM : 1.5;
-  return Math.round(value / g) * g;
+  if (!(gridM > 1e-9)) return value;
+
+
+  return Math.round(value / gridM) * gridM;
 }
 
 /** Ajusta centro (x,y) al grid respetando que el puesto siga entrando en polígono. */
@@ -247,10 +249,20 @@ export function scalePolyToEnvelope(poly: Pt[], targetWm: number, targetHm: numb
 }
 
 export function snapPolyToGrid(poly: Pt[], gridM: number): Pt[] {
-  const g = gridM > 0.01 ? gridM : 1.5;
+
+
+  const g = gridM > 0 ? gridM : 0;
+
+
+  if (!(g > 1e-9)) return poly.map((p) => ({ ...p }));
 
   return poly.map((p) => ({
     x: snapCoord(p.x, g),
     y: snapCoord(p.y, g),
   }));
 }
+
+/** Solo mesas: 1,5 m — no usar para perímetro/caja envolvente de la zona plaza. */
+
+
+export const ZONE_OUTLINE_SNAP_M = 0;
