@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 
 import "./globals.css";
@@ -32,6 +34,8 @@ export default function RootLayout({
         className={`${sans.variable} ${mono.variable} min-h-screen bg-[#030712] text-neutral-100 antialiased`}
       >
         {children}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

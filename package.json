@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "html-to-image": "^1.11.13",
     "jose": "^6.2.3",
     "mammoth": "^1.12.0",
