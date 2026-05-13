@@ -18,9 +18,123 @@ function splitLineCells(line: string): string[] {
 
   const normalized = line.replace(/\u00a0/g, " ").trim();
 
-
   return [normalized];
+}
 
+function nextNonEmptyIndex(lines: string[], start: number): number {
+  let j = start;
+  while (j < lines.length && !lines[j]) j += 1;
+  return j;
+}
+
+/** Palabras típicas de encabezado en una celda sola (evita falsos merges). */
+function looksLikeHeaderCellSnippet(s: string): boolean {
+  const t = s.toLowerCase();
+  if (/^n[uú]?°?\s*d?e?\s*puesto\b/.test(t)) return true;
+
+  if (/\bnombre\s+del\s+titular\b/.test(t) || /\bnombre\s+del\s+responsable\b/.test(t)) return true;
+
+  if (/\bnombre\s+del\s+puesto\b/.test(t) || /\bnombre\s+del\s+emprendimiento\b/.test(t)) return true;
+
+  return false;
+}
+
+function looksLikeStandaloneStallCell(s: string): boolean {
+  if (!/^\d{1,5}$/.test(s)) return false;
+
+  // Evitar fusionar años típicos (celdas tipo “2024” fuera del listado de puestos).
+  if (/^(19|20)\d{2}$/.test(s)) return false;
+
+  return true;
+}
+
+/**
+ * Mammoth suele sacar tablas como una celda por línea: número, titular, nombre del puesto en líneas sucesivas.
+ * Armamos una fila TAB única para parseStallListRow.
+ */
+function collapseVerticalInstitutionalTriplets(trimmedLines: string[]): string[] {
+  const out: string[] = [];
+
+  let i = 0;
+  while (i < trimmedLines.length) {
+    const line = trimmedLines[i];
+
+    if (!line) {
+      i += 1;
+      continue;
+    }
+
+    if (looksLikeStandaloneStallCell(line)) {
+      const j = nextNonEmptyIndex(trimmedLines, i + 1);
+
+      const k = nextNonEmptyIndex(trimmedLines, j + 1);
+
+      const titular = j < trimmedLines.length ? trimmedLines[j] : "";
+
+      const empresa = k < trimmedLines.length ? trimmedLines[k] : "";
+
+      if (
+        titular &&
+        empresa &&
+        j < trimmedLines.length &&
+        k < trimmedLines.length &&
+        !looksLikeHeaderCellSnippet(titular) &&
+        !looksLikeHeaderCellSnippet(empresa)
+      ) {
+        out.push(`${line}\t${titular}\t${empresa}`);
+
+        i = k + 1;
+
+        continue;
+      }
+    }
+
+    out.push(line);
+
+    i += 1;
+  }
+
+  return out;
+}
+
+/**
+ * Variante Mammoth: “nº + tab + titular” en una línea y “nombre del puesto” en la siguiente (sin tab).
+ */
+function mergeStallTitularWithTrailingEmpresaLine(lines: string[]): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const cur = lines[i] ?? "";
+
+    const cells = splitLineCells(cur).filter((s) => s.length > 0);
+
+    const nextLine = lines[i + 1];
+    const nextCells = typeof nextLine === "string" ? splitLineCells(nextLine).filter((s) => s.length > 0) : [];
+
+    if (
+      cells.length === 2 &&
+      typeof nextLine === "string" &&
+      looksLikeStandaloneStallCell(cells[0] ?? "") &&
+      (cells[1]?.length ?? 0) > 0 &&
+      nextCells.length === 1 &&
+      nextCells[0]?.length &&
+      !looksLikeHeaderCellSnippet(nextCells[0] ?? "") &&
+      !looksLikeStandaloneStallCell(nextCells[0] ?? "") &&
+      !looksLikeHeaderCellSnippet(cells[1] ?? "")
+    ) {
+      out.push(`${cells[0]}\t${cells[1]}\t${nextCells[0]}`);
+
+      i += 2;
+
+      continue;
+    }
+
+    out.push(cur);
+
+    i += 1;
+  }
+
+  return out;
 }
 
 /** Encabezado de tabla tipo “Listado de puestos…”. */
@@ -79,23 +193,16 @@ function parseStallListRow(cells: string[]): Row | null {
 }
 
 function parseParticipantRows(text: string): Row[] {
-
-
-  const lines = text
-
-
+  const trimmed = text
     .split(/\r?\n/)
-
     .map((ln) => ln.replace(/\u00a0/g, " ").trim())
-
-
-    .filter(Boolean)
-
-
     .filter((ln) => !ln.startsWith("#"));
 
-  const rows: Row[] = [];
+  const lines = mergeStallTitularWithTrailingEmpresaLine(
+    collapseVerticalInstitutionalTriplets(trimmed),
+  ).filter(Boolean);
 
+  const rows: Row[] = [];
 
   for (const line of lines) {
 
@@ -213,8 +320,8 @@ export async function POST(req: Request) {
       hint:
 
 
-        "Tabla institucional: nº[TAB] titular[TAB] nombre del puesto. El teléfono y los detalles de “qué trae” " +
-        "no vienen del Word — los completás después en la tabla. También sirve persona por línea o " +
+        "Tabla institucional: nº[TAB o salto de línea] titular[TAB o salto de línea] nombre del puesto. " +
+        "El teléfono y los detalles de “qué trae” los completás después. También: una persona por línea o " +
         "Nombre[TAB] teléfono[TAB] qué lleva.",
 
 

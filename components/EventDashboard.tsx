@@ -1887,9 +1887,10 @@ export default function EventDashboard() {
           : null}
 
           <p className="text-xs text-neutral-500">
-            Docx (.docx): tabla con <strong>nº de puesto · titular del puesto · nombre del puesto</strong> (tabulador
-            entre columnas). Se guarda el titular en &quot;Nombre&quot; y el nombre del puesto en la columna de al
-            lado; ahí después sumás qué trae y el contacto cuando quieras. También vale una persona por línea o{" "}
+            Docx (.docx): tabla con <strong>nº de puesto · titular · nombre del puesto</strong> (una columna por
+            celda: tab entre columnas, o bien Word suele meter cada celda en su propia línea al exportar texto — eso también
+            se interpreta bien). Titular va en &quot;Nombre&quot;, el nombre del puesto en la tercera columna; después
+            sumás qué trae y el contacto. También vale una persona por línea o{" "}
             <strong>nombre · teléfono · qué trae</strong>.
           </p>
 
