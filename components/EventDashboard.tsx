@@ -19,8 +19,19 @@ import type {
   Venue,
 } from "@/lib/types";
 import { CATEGORY_COLOR, CATEGORY_LABEL } from "@/lib/types";
+import { toPng } from "html-to-image";
 import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+function fileSlug(s: string, max = 40): string {
+  const t = s
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9\-_.áéíóúüñÁÉÍÓÚÜÑ]+/g, "")
+    .replace(/^-+|-+$/g, "");
+
+  return t.slice(0, max) || "zona";
+}
 
 function newId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto)
@@ -292,10 +303,44 @@ export default function EventDashboard() {
   const [persistMsg, setPersistMsg] = useState<string | null>(null);
 
   const [persistBusy, setPersistBusy] = useState(false);
+
+  const [exportVisualBusy, setExportVisualBusy] = useState(false);
+
+  const [authGate, setAuthGate] = useState<null | { locked: boolean }>(null);
+
+  const planExportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+
+
+    void fetch("/api/auth/status", { credentials: "include" })
+
+
+      .then((r) => (r.ok ? r.json() : null))
+
+
+      .then((json: unknown) => {
+
+
+        const o = json && typeof json === "object" ? (json as { locked?: unknown }) : null;
+
+
+        const locked = o && typeof o.locked === "boolean" ? o.locked : false;
+
+
+        setAuthGate({ locked });
+
+
+      });
+
+
+  }, []);
+
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/state", { cache: "no-store" });
+        const res = await fetch("/api/state", { cache: "no-store", credentials: "include" });
         if (!res.ok)
           throw new Error("No pudimos leer `/api/state`. ¿Corre `npm run dev` en esta carpeta?");
 
@@ -337,6 +382,7 @@ export default function EventDashboard() {
       void fetch("/api/state", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(state),
       }).catch(() => {
         console.warn("[salon-planner]", "persistencia tardía falló una vez.");
@@ -730,7 +776,7 @@ export default function EventDashboard() {
     fd.append("file", file);
 
     try {
-      const res = await fetch("/api/import-word", { method: "POST", body: fd });
+      const res = await fetch("/api/import-word", { method: "POST", credentials: "include", body: fd });
 
       const data = (await res.json()) as {
 
@@ -835,6 +881,9 @@ export default function EventDashboard() {
 
 
         headers: { "Content-Type": "application/json" },
+
+
+        credentials: "include",
 
 
         body: JSON.stringify(state),
@@ -981,7 +1030,258 @@ export default function EventDashboard() {
     URL.revokeObjectURL(url);
 
 
+
+    setPersistMsg("JSON técnico descargado (sirve sólo para «Importar JSON» aquí).");
+
+
   }
+
+
+
+
+  async function logout(): Promise<void> {
+
+
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+
+
+    window.location.href = "/login";
+
+
+  }
+
+
+
+
+
+  async function exportPlanPng(): Promise<void> {
+
+
+    if (!state) return;
+
+
+    const el = planExportRef.current;
+
+
+    if (!el) {
+
+
+      setPersistMsg("Abrí «Plano interactivo» y elegí la zona; la imagen sale de esa vista.");
+
+
+      return;
+
+
+    }
+
+
+
+
+
+
+
+    setExportVisualBusy(true);
+
+
+    setPersistMsg(null);
+
+
+
+
+
+    try {
+
+
+      const dataUrl = await toPng(el, {
+
+
+        cacheBust: true,
+
+
+        pixelRatio: 2,
+
+
+        backgroundColor: "#030712",
+
+
+      });
+
+
+
+
+
+
+
+
+      const zoneName =
+
+
+        state.venue.zones.find((z) => z.id === activeZoneId)?.name ?? activeZoneId;
+
+
+
+
+
+      const anchor = document.createElement("a");
+
+
+      anchor.href = dataUrl;
+
+
+      anchor.download = `biblioteca-lp-${fileSlug(zoneName)}-${new Date().toISOString().slice(0, 10)}.png`;
+
+
+      anchor.click();
+
+
+
+
+
+      setPersistMsg("Imagen PNG lista (WhatsApp, mail o impresora).");
+
+
+    } catch {
+
+
+      setPersistMsg("No pudimos generar la imagen. Probá SVG o JSON.");
+
+
+    } finally {
+
+
+      setExportVisualBusy(false);
+
+
+    }
+
+
+  }
+
+
+
+
+
+
+  function exportPlanSvg(): void {
+
+
+    if (!state) return;
+
+
+    const root = planExportRef.current;
+
+
+    if (!root) {
+
+
+      setPersistMsg("Abrí «Plano interactivo» para exportar el vector.");
+
+
+      return;
+
+
+    }
+
+
+
+
+
+
+
+
+
+    const svg = root.querySelector("svg");
+
+
+    if (!svg) {
+
+
+      setPersistMsg("No hay dibujo vectorial en pantalla.");
+
+
+      return;
+
+
+    }
+
+
+
+
+
+
+    try {
+
+
+      const xml = new XMLSerializer().serializeToString(svg);
+
+
+
+
+
+      const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n`, xml], {
+
+
+        type: "image/svg+xml;charset=utf-8",
+
+
+      });
+
+
+
+
+      const url = URL.createObjectURL(blob);
+
+
+
+
+
+      const anchor = document.createElement("a");
+
+
+      const zoneName =
+
+
+        state.venue.zones.find((z) => z.id === activeZoneId)?.name ?? activeZoneId;
+
+
+
+
+
+      anchor.href = url;
+
+
+      anchor.download = `biblioteca-lp-${fileSlug(zoneName)}-${new Date().toISOString().slice(0, 10)}.svg`;
+
+
+      anchor.click();
+
+
+
+
+
+      URL.revokeObjectURL(url);
+
+
+
+
+
+      setPersistMsg("Archivo SVG listo (Inkscape, Illustrator).");
+
+
+    } catch {
+
+
+      setPersistMsg("No se pudo armar el SVG.");
+
+
+    }
+
+
+  }
+
+
+
+
 
 
 
@@ -1149,8 +1449,28 @@ export default function EventDashboard() {
 
 
 
-            {""} Autoguardado unos ms después de cada cambio. Usá <strong className="text-neutral-300">Guardar ahora</strong>{" "}
-            (arriba) si querés asegurarte antes de recargar; también podés Exportar/importar JSON del mismo plano.
+            {""} Autoguardado tras cada cambio. Usá <strong className="text-neutral-300">Guardar ahora</strong> si
+
+
+            necesitás asegurar antes de recargar.
+
+
+
+            {""} Podés exportar {""}
+
+            <strong className="text-neutral-300">imagen PNG</strong> {""}
+
+            del croquis ({""}<em className="text-neutral-500">ideal para WhatsApp</em>), {""}
+
+            <strong className="text-neutral-300">SVG vectorial</strong> {""}
+
+            para otros programas de dibujo/plotter o {""}
+
+            <strong className="text-neutral-300">JSON</strong>{""}
+
+
+            sólo como respaldo o para volver a importar este sitio.
+
 
 
           </p>
@@ -1165,7 +1485,16 @@ export default function EventDashboard() {
               value={`${confirmedCount}/${Math.max(state.participants.length, 1)}`}
             />
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex max-w-xl flex-wrap justify-end gap-2">
+            {authGate?.locked ? (
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="rounded-xl border border-rose-500/50 bg-rose-500/10 px-4 py-2 text-xs font-semibold text-rose-100 hover:bg-rose-500/18"
+              >
+                Salir
+              </button>
+            ) : null}
             <button
               type="button"
               disabled={persistBusy}
@@ -1175,14 +1504,32 @@ export default function EventDashboard() {
               Guardar ahora
             </button>
             <button
+              title="Captura visible de la zona actual (Plano interactivo)"
+              type="button"
+              disabled={exportVisualBusy}
+              onClick={() => void exportPlanPng()}
+              className="rounded-xl border border-violet-500/45 bg-violet-500/10 px-4 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-500/18 disabled:cursor-wait disabled:opacity-65"
+            >
+              Imagen PNG
+            </button>
+            <button
+              title="Vector del lienzo SVG (zonas seleccionadas en Plano)"
+              type="button"
+              onClick={() => exportPlanSvg()}
+              className="rounded-xl border border-amber-500/45 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-50 hover:bg-amber-500/18"
+            >
+              Dibujo SVG
+            </button>
+            <button
+              title="Para importar después en esta página"
               type="button"
               onClick={() => exportPlanJson()}
               className="rounded-xl border border-sky-500/45 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/18"
             >
-              Exportar plano
+              Backup JSON
             </button>
             <label className="cursor-pointer rounded-xl border border-neutral-600 bg-neutral-900/55 px-4 py-2 text-xs font-semibold text-neutral-100 hover:bg-neutral-800/65">
-              Importar plano
+              Importar JSON
               <input
                 type="file"
                 accept="application/json,.json"
@@ -1225,6 +1572,7 @@ export default function EventDashboard() {
         <div className="space-y-3">
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
           <FloorPlan
+            captureRef={planExportRef}
             venue={state.venue}
             stalls={state.stalls}
             participants={state.participants}

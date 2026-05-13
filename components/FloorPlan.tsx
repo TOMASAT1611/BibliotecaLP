@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  type Ref,
   useCallback,
   useEffect,
   useMemo,
@@ -61,6 +62,13 @@ type Props = {
   onPolygonEditActiveChange?: (next: boolean) => void;
 
   onZonePolygonChange?: (zoneId: string, polygonM: Pt[]) => void;
+
+
+  /** Marco del lienzo de la zona (export PNG/SVG). */
+
+
+  captureRef?: Ref<HTMLDivElement>;
+
 
 };
 
@@ -305,6 +313,8 @@ function ZoneCanvas({
 
   onZonePolygonChange,
 
+  captureRef,
+
 }: {
 
   zone: PlanZone;
@@ -326,6 +336,8 @@ function ZoneCanvas({
 
   onZonePolygonChange?: (zoneId: string, polygonM: Pt[]) => void;
 
+
+  captureRef?: Ref<HTMLDivElement>;
 
 }) {
 
@@ -891,9 +903,11 @@ function ZoneCanvas({
         </span>
       </div>
 
+
+      <div ref={captureRef} className="flex min-h-0 min-w-0 flex-1">
+
       <svg
         ref={svgRef}
-
 
         className="h-[min(88vh,1120px)] w-full flex-1 touch-none cursor-crosshair select-none"
 
@@ -1274,6 +1288,7 @@ function ZoneCanvas({
         </text>
 
       </svg>
+      </div>
     </div>
   );
 
@@ -1303,6 +1318,8 @@ export function FloorPlan(props: Props) {
     onPolygonEditActiveChange,
 
     onZonePolygonChange,
+
+    captureRef,
 
   } = props;
 
@@ -1591,6 +1608,10 @@ export function FloorPlan(props: Props) {
 
 
             onZonePolygonChange={onZonePolygonChange}
+
+
+
+            captureRef={captureRef}
 
 
           />
