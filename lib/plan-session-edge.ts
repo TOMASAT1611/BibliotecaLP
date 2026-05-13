@@ -1,4 +1,4 @@
-import { jwtVerify } from "jose";
+import { jwtVerify } from "jose/jwt/verify";
 
 /** Cookie HttpOnly donde guardamos la sesión del planeador */
 export const PLAN_SESSION_COOKIE = "biblioteca_planner_sess";
