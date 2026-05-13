@@ -2,7 +2,6 @@
 
 import { FloorPlan } from "@/components/FloorPlan";
 import {
-  boundingBox,
   centroidPoly,
   clampStallCenter,
   snapStallCenterXY,
@@ -21,6 +20,7 @@ import type {
 import { CATEGORY_COLOR, CATEGORY_LABEL } from "@/lib/types";
 import { toPng } from "html-to-image";
 import type { ChangeEvent, ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 function fileSlug(s: string, max = 40): string {
@@ -296,8 +296,6 @@ export default function EventDashboard() {
 
   const zonesEditorReady = useRef(false);
 
-  const [storageBackendLabel, setStorageBackendLabel] = useState<string | null>(null);
-
   const [polygonEditActive, setPolygonEditActive] = useState(false);
 
   const [persistMsg, setPersistMsg] = useState<string | null>(null);
@@ -305,6 +303,16 @@ export default function EventDashboard() {
   const [persistBusy, setPersistBusy] = useState(false);
 
   const [exportVisualBusy, setExportVisualBusy] = useState(false);
+
+  type ExportFmt = "png" | "svg" | "json";
+
+  type ExportScope = "current" | "all";
+
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+
+  const [exportFmt, setExportFmt] = useState<ExportFmt>("png");
+
+  const [exportScope, setExportScope] = useState<ExportScope>("current");
 
   const [authGate, setAuthGate] = useState<null | { locked: boolean }>(null);
 
@@ -338,28 +346,35 @@ export default function EventDashboard() {
 
 
   useEffect(() => {
+
+
+    if (!exportDialogOpen) return;
+
+
+    function esc(ev: KeyboardEvent) {
+
+
+      if (ev.key === "Escape") setExportDialogOpen(false);
+
+
+    }
+
+
+    window.addEventListener("keydown", esc);
+
+
+    return () => window.removeEventListener("keydown", esc);
+
+
+  }, [exportDialogOpen]);
+
+
+  useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/state", { cache: "no-store", credentials: "include" });
         if (!res.ok)
           throw new Error("No pudimos leer `/api/state`. ¿Corre `npm run dev` en esta carpeta?");
-
-        const mode = res.headers.get("x-planner-storage");
-
-
-        setStorageBackendLabel(
-          mode === "neon" ?
-            "Neon (Postgres)"
-
-          : mode === "filesystem" ?
-            "archivo local JSON"
-
-          : mode === "neon_required" ?
-            "hay que cargar Neon (DATABASE_URL)"
-
-          : `desconocido (${mode ?? "?"})`,
-        );
-
 
         const json = (await res.json()) as AppState;
 
@@ -1054,237 +1069,118 @@ export default function EventDashboard() {
 
 
 
-  async function exportPlanPng(): Promise<void> {
 
-
-    if (!state) return;
-
-
-    const el = planExportRef.current;
-
-
-    if (!el) {
-
-
-      setPersistMsg("Abrí «Plano interactivo» y elegí la zona; la imagen sale de esa vista.");
-
-
-      return;
-
-
-    }
-
-
-
-
-
-
-
-    setExportVisualBusy(true);
-
-
-    setPersistMsg(null);
-
-
-
-
-
-    try {
-
-
-      const dataUrl = await toPng(el, {
-
-
-        cacheBust: true,
-
-
-        pixelRatio: 2,
-
-
-        backgroundColor: "#030712",
-
-
-      });
-
-
-
-
-
-
-
-
-      const zoneName =
-
-
-        state.venue.zones.find((z) => z.id === activeZoneId)?.name ?? activeZoneId;
-
-
-
-
-
-      const anchor = document.createElement("a");
-
-
-      anchor.href = dataUrl;
-
-
-      anchor.download = `biblioteca-lp-${fileSlug(zoneName)}-${new Date().toISOString().slice(0, 10)}.png`;
-
-
-      anchor.click();
-
-
-
-
-
-      setPersistMsg("Imagen PNG lista (WhatsApp, mail o impresora).");
-
-
-    } catch {
-
-
-      setPersistMsg("No pudimos generar la imagen. Probá SVG o JSON.");
-
-
-    } finally {
-
-
-      setExportVisualBusy(false);
-
-
-    }
-
-
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, ms);
+    });
   }
 
+  async function downloadPngCapture(
+    root: HTMLDivElement,
+    zoneLabel: string,
+    stemExtra: string,
+  ): Promise<void> {
+    const dataUrl = await toPng(root, {
+      cacheBust: true,
+      pixelRatio: 2,
+      backgroundColor: "#030712",
+    });
+    const anchor = document.createElement("a");
+    anchor.href = dataUrl;
+    const day = new Date().toISOString().slice(0, 10);
+    anchor.download = `biblioteca-lp-${fileSlug(zoneLabel)}-${day}${stemExtra}.png`;
+    anchor.click();
+  }
 
-
-
-
-
-  function exportPlanSvg(): void {
-
-
-    if (!state) return;
-
-
-    const root = planExportRef.current;
-
-
-    if (!root) {
-
-
-      setPersistMsg("Abrí «Plano interactivo» para exportar el vector.");
-
-
-      return;
-
-
-    }
-
-
-
-
-
-
-
-
-
+  function downloadSvgCapture(root: HTMLDivElement, zoneLabel: string, stemExtra: string): void {
     const svg = root.querySelector("svg");
-
-
-    if (!svg) {
-
-
-      setPersistMsg("No hay dibujo vectorial en pantalla.");
-
-
-      return;
-
-
-    }
-
-
-
-
-
-
+    if (!svg) throw new Error("sin-svg");
+    const xml = new XMLSerializer().serializeToString(svg);
+    const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n`, xml], {
+      type: "image/svg+xml;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
     try {
-
-
-      const xml = new XMLSerializer().serializeToString(svg);
-
-
-
-
-
-      const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n`, xml], {
-
-
-        type: "image/svg+xml;charset=utf-8",
-
-
-      });
-
-
-
-
-      const url = URL.createObjectURL(blob);
-
-
-
-
-
       const anchor = document.createElement("a");
-
-
-      const zoneName =
-
-
-        state.venue.zones.find((z) => z.id === activeZoneId)?.name ?? activeZoneId;
-
-
-
-
-
       anchor.href = url;
-
-
-      anchor.download = `biblioteca-lp-${fileSlug(zoneName)}-${new Date().toISOString().slice(0, 10)}.svg`;
-
-
+      const day = new Date().toISOString().slice(0, 10);
+      anchor.download = `biblioteca-lp-${fileSlug(zoneLabel)}-${day}${stemExtra}.svg`;
       anchor.click();
-
-
-
-
-
+    } finally {
       URL.revokeObjectURL(url);
-
-
-
-
-
-      setPersistMsg("Archivo SVG listo (Inkscape, Illustrator).");
-
-
-    } catch {
-
-
-      setPersistMsg("No se pudo armar el SVG.");
-
-
     }
-
-
   }
 
+  async function runVisualExport(mode: ExportFmt, scope: ExportScope): Promise<void> {
+    if (!state || (mode !== "png" && mode !== "svg")) return;
+    const snapshotTab = tab;
+    const snapshotZone = activeZoneId;
+    flushSync(() => {
+      setTab("plano");
+    });
+    await delay(72);
+    try {
+      const zones: PlanZone[] =
+        scope === "all"
+          ? [...state.venue.zones]
+          : (() => {
+              const picked =
+                state.venue.zones.find((z) => z.id === activeZoneId) ?? state.venue.zones[0];
+              return picked ? [picked] : [];
+            })();
+      if (!zones.length) {
+        setPersistMsg("No hay zonas para exportar.");
+        return;
+      }
+      setExportVisualBusy(true);
+      setPersistMsg(null);
+      for (let zi = 0; zi < zones.length; zi += 1) {
+        const zone = zones[zi];
+        flushSync(() => {
+          setActiveZoneId(zone.id);
+        });
+        await delay(zi === 0 && scope === "current" ? 280 : 360);
+        const root = planExportRef.current;
+        if (!root?.querySelector("svg")) {
+          setPersistMsg(`La zona "${zone.name}" no se pudo capturar.`);
+          break;
+        }
+        const extra = zones.length > 1 ? `-${String(zi + 1)}` : "";
+        if (mode === "png") await downloadPngCapture(root, zone.name, extra);
+        else downloadSvgCapture(root, zone.name, extra);
+        await delay(160);
+      }
+      if (zones.length > 1)
+        setPersistMsg(mode === "png" ? `${zones.length} PNG (uno por zona).` : `${zones.length} SVG.`);
+      else setPersistMsg(mode === "png" ? "PNG listo." : "SVG listo.");
+    } catch {
+      setPersistMsg("Algo falló al exportar.");
+    } finally {
+      flushSync(() => {
+        setActiveZoneId(snapshotZone);
+      });
+      flushSync(() => {
+        setTab(snapshotTab);
+      });
+      setExportVisualBusy(false);
+    }
+  }
 
-
-
-
-
-
+  async function handleExportConfirm(): Promise<void> {
+    if (!state) return;
+    try {
+      if (exportFmt === "json") {
+        exportPlanJson();
+        setExportDialogOpen(false);
+        return;
+      }
+      await runVisualExport(exportFmt, exportScope);
+      setExportDialogOpen(false);
+    } catch {
+      setExportDialogOpen(false);
+    }
+  }
   async function importPlanJsonFile(ev: ChangeEvent<HTMLInputElement>): Promise<void> {
 
 
@@ -1378,102 +1274,11 @@ export default function EventDashboard() {
   if (!mounted || !state)
     return <Splash>{loadError ?? "Cargando medidas locales…"}</Splash>;
 
-  const dimsSummary =
-    state.venue.zones.length ?
-      state.venue.zones
-        .map((z) => {
-          const bb = boundingBox(z.polygonM);
-
-
-          const w = (bb.maxX - bb.minX).toFixed(2);
-
-
-          const h = (bb.maxY - bb.minY).toFixed(2);
-
-
-          return `${z.name}: ${w} × ${h} m`;
-
-
-        })
-
-
-        .join(" · ")
-    : "";
-
   return (
     <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-8 px-4 py-8 sm:px-8">
       <header className="flex flex-col gap-4 border-b border-white/5 pb-6 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.32em] text-sky-300/80">
-            Biblioteca LP · planificación de espacio físico
-          </p>
-
-          <h1 className="text-3xl font-semibold text-white sm:text-4xl">
-            {state.venue.name}
-          </h1>
-
-          <p className="max-w-2xl text-sm text-neutral-400">
-            Plano oscuro por zona (pasto, frente biblioteca y bandas dentro del galpón): {dimsSummary}
-
-
-            {""}. Persistencia {""}
-
-
-            <code className="rounded bg-neutral-950 px-2 py-[2px] text-sky-200">{
-
-
-              storageBackendLabel ?? "detectando..."
-
-
-            }</code>
-
-
-            {
-
-
-              storageBackendLabel === "Neon (Postgres)" ?
-                ""
-
-              : storageBackendLabel === "hay que cargar Neon (DATABASE_URL)" ?
-                <> En Vercel el disco es solo lectura: agregá {""}
-
-                  <code className="text-neutral-400">DATABASE_URL</code> (Neon) en Variables del proyecto.{""}</>
-
-              : <> — archivo {""}<code className="text-neutral-400">data/state.json</code>; en prod {""}
-
-
-                  <code className="text-neutral-400">DATABASE_URL</code> Neon.</>
-
-
-            }
-
-
-
-            {""} Autoguardado tras cada cambio. Usá <strong className="text-neutral-300">Guardar ahora</strong> si
-
-
-            necesitás asegurar antes de recargar.
-
-
-
-            {""} Podés exportar {""}
-
-            <strong className="text-neutral-300">imagen PNG</strong> {""}
-
-            del croquis ({""}<em className="text-neutral-500">ideal para WhatsApp</em>), {""}
-
-            <strong className="text-neutral-300">SVG vectorial</strong> {""}
-
-            para otros programas de dibujo/plotter o {""}
-
-            <strong className="text-neutral-300">JSON</strong>{""}
-
-
-            sólo como respaldo o para volver a importar este sitio.
-
-
-
-          </p>
+        <div>
+          <h1 className="text-3xl font-semibold text-white sm:text-4xl">{state.venue.name}</h1>
         </div>
 
         <div className="flex min-w-[12rem] flex-col items-stretch gap-3 md:items-end">
@@ -1504,32 +1309,15 @@ export default function EventDashboard() {
               Guardar ahora
             </button>
             <button
-              title="Captura visible de la zona actual (Plano interactivo)"
               type="button"
               disabled={exportVisualBusy}
-              onClick={() => void exportPlanPng()}
-              className="rounded-xl border border-violet-500/45 bg-violet-500/10 px-4 py-2 text-xs font-semibold text-violet-100 hover:bg-violet-500/18 disabled:cursor-wait disabled:opacity-65"
+              onClick={() => setExportDialogOpen(true)}
+              className="rounded-xl border border-sky-500/45 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/18 disabled:cursor-wait disabled:opacity-65"
             >
-              Imagen PNG
-            </button>
-            <button
-              title="Vector del lienzo SVG (zonas seleccionadas en Plano)"
-              type="button"
-              onClick={() => exportPlanSvg()}
-              className="rounded-xl border border-amber-500/45 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-50 hover:bg-amber-500/18"
-            >
-              Dibujo SVG
-            </button>
-            <button
-              title="Para importar después en esta página"
-              type="button"
-              onClick={() => exportPlanJson()}
-              className="rounded-xl border border-sky-500/45 bg-sky-500/10 px-4 py-2 text-xs font-semibold text-sky-100 hover:bg-sky-500/18"
-            >
-              Backup JSON
+              Exportar…
             </button>
             <label className="cursor-pointer rounded-xl border border-neutral-600 bg-neutral-900/55 px-4 py-2 text-xs font-semibold text-neutral-100 hover:bg-neutral-800/65">
-              Importar JSON
+              Importar archivo
               <input
                 type="file"
                 accept="application/json,.json"
@@ -1543,6 +1331,129 @@ export default function EventDashboard() {
           : null}
         </div>
       </header>
+
+      {exportDialogOpen ? (
+        <div
+          aria-labelledby="exportar-titulo"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex cursor-default items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-[3px]"
+          role="dialog"
+          onClick={() => {
+            if (!exportVisualBusy) setExportDialogOpen(false);
+          }}
+        >
+          <div
+            role="presentation"
+            className="w-full max-w-md rounded-2xl border border-white/14 bg-neutral-950/94 p-6 shadow-[0_28px_80px_rgba(0,0,0,0.55)]"
+            onClick={(ev) => ev.stopPropagation()}
+          >
+            <h2 id="exportar-titulo" className="text-lg font-semibold text-neutral-50">
+              Exportar
+            </h2>
+            <p className="mt-2 text-[13px] leading-snug text-neutral-400">
+              Elegí el formato.
+              <span className="block pt-1 text-neutral-500">
+                PNG y SVG se capturan desde el plano interactivo (por un instante te llevamos ahí).
+              </span>
+            </p>
+            <div className="mt-6 space-y-5">
+              <fieldset className="space-y-3 text-sm">
+                <legend className="text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
+                  ¿En qué formato?
+                </legend>
+                <label className="flex cursor-pointer items-center gap-2 text-neutral-200">
+                  <input
+                    checked={exportFmt === "png"}
+                    className="h-4 w-4 border-neutral-600 bg-neutral-900 text-sky-500"
+                    name="export-fmt"
+                    onChange={() => setExportFmt("png")}
+                    type="radio"
+                  />
+                  PNG · imagen (WhatsApp, mail…)
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-neutral-200">
+                  <input
+                    checked={exportFmt === "svg"}
+                    className="h-4 w-4 border-neutral-600 bg-neutral-900 text-sky-500"
+                    name="export-fmt"
+                    onChange={() => setExportFmt("svg")}
+                    type="radio"
+                  />
+                  SVG · dibujo vectorial
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-neutral-200">
+                  <input
+                    checked={exportFmt === "json"}
+                    className="h-4 w-4 border-neutral-600 bg-neutral-900 text-sky-500"
+                    name="export-fmt"
+                    onChange={() => setExportFmt("json")}
+                    type="radio"
+                  />
+                  Archivo técnico (para importar después en esta página)
+                </label>
+              </fieldset>
+
+              {exportFmt !== "json" ? (
+                <fieldset className="space-y-3 text-sm">
+                  <legend className="text-[11px] font-semibold uppercase tracking-[0.2em] text-neutral-500">
+                    ¿Qué zonas?
+                  </legend>
+                  <label className="flex cursor-pointer gap-3 text-neutral-200">
+                    <input
+                      checked={exportScope === "current"}
+                      className="mt-0.5 h-4 w-4 shrink-0 border-neutral-600 bg-neutral-900 text-sky-500"
+                      name="export-scope"
+                      onChange={() => setExportScope("current")}
+                      type="radio"
+                    />
+                    <span>
+                      Solo «{state.venue.zones.find((z) => z.id === activeZoneId)?.name ?? "?"}»
+                    </span>
+                  </label>
+                  <label className="flex cursor-pointer gap-3 text-neutral-200">
+                    <input
+                      checked={exportScope === "all"}
+                      className="mt-0.5 h-4 w-4 shrink-0 border-neutral-600 bg-neutral-900 text-sky-500"
+                      name="export-scope"
+                      onChange={() => setExportScope("all")}
+                      type="radio"
+                    />
+                    <span>
+                      Todas las zonas ({state.venue.zones.length}) · un archivo por zona (
+                      <code className="text-neutral-400">-1</code>, <code className="text-neutral-400">-2</code>…)
+                    </span>
+                  </label>
+                </fieldset>
+              ) : (
+                <p className="rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-[13px] text-neutral-400">
+                  El JSON <span className="text-neutral-200">siempre incluye todas las zonas, mesas y personas</span>.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-8 flex flex-wrap justify-end gap-2">
+              <button
+                className="rounded-xl border border-white/14 px-4 py-2 text-xs font-semibold text-neutral-300 hover:bg-white/[0.06]"
+                disabled={exportVisualBusy}
+                type="button"
+                onClick={() => {
+                  setExportDialogOpen(false);
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-xl bg-sky-600 px-4 py-2 text-xs font-semibold text-neutral-950 hover:bg-sky-500 disabled:cursor-wait disabled:opacity-50"
+                disabled={exportVisualBusy}
+                type="button"
+                onClick={() => void handleExportConfirm()}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <nav className="flex flex-wrap gap-2 text-sm">
         {(
