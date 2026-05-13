@@ -18,7 +18,7 @@ import type {
   Venue,
 } from "@/lib/types";
 import { CATEGORY_COLOR, CATEGORY_LABEL } from "@/lib/types";
-import { toPng } from "html-to-image";
+import { toCanvas, toPng } from "html-to-image";
 import type { ChangeEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1112,59 +1112,369 @@ export default function EventDashboard() {
     }
   }
 
+  async function downloadStackedZonesPng(zones: PlanZone[]): Promise<void> {
+    const pad = 22;
+
+    const gap = 26;
+
+    const captures: HTMLCanvasElement[] = [];
+
+    for (let zi = 0; zi < zones.length; zi += 1) {
+      const zone = zones[zi];
+
+      flushSync(() => {
+
+
+        setActiveZoneId(zone.id);
+
+
+      });
+
+
+      await delay(zi === 0 ? 300 : 380);
+
+      const root = planExportRef.current;
+
+
+      if (!root?.querySelector("svg")) throw new Error(`sin-captura-${zone.id}`);
+
+
+      captures.push(
+        await toCanvas(root, {
+          cacheBust: true,
+          pixelRatio: 2,
+          backgroundColor: "#030712",
+        }),
+      );
+    }
+
+
+
+    const maxW = Math.max(...captures.map((c) => c.width));
+
+
+    const totalH =
+      captures.reduce((acc, c) => acc + c.height, 0) + gap * (captures.length - 1) + pad * 2;
+
+
+    const merged = document.createElement("canvas");
+
+    merged.width = maxW + pad * 2;
+
+    merged.height = totalH;
+
+    const ctx = merged.getContext("2d");
+    if (!ctx) throw new Error("sin-2d");
+
+
+    ctx.fillStyle = "#030712";
+
+    ctx.fillRect(0, 0, merged.width, merged.height);
+
+    let y = pad;
+
+
+
+    for (const c of captures) {
+
+
+      ctx.drawImage(c, pad + (maxW - c.width) / 2, y);
+
+      y += c.height + gap;
+
+
+    }
+
+
+
+    const dataUrl = merged.toDataURL("image/png");
+
+
+    const anchor = document.createElement("a");
+
+
+    anchor.href = dataUrl;
+
+
+    const day = new Date().toISOString().slice(0, 10);
+
+
+    anchor.download = `biblioteca-lp-plano-completo-${day}.png`;
+
+    anchor.click();
+
+
+  }
+
+
+
   async function runVisualExport(mode: ExportFmt, scope: ExportScope): Promise<void> {
     if (!state || (mode !== "png" && mode !== "svg")) return;
     const snapshotTab = tab;
     const snapshotZone = activeZoneId;
     flushSync(() => {
+
+
       setTab("plano");
+
+
     });
+
+
+
     await delay(72);
+
+
+
     try {
       const zones: PlanZone[] =
+
+
         scope === "all"
           ? [...state.venue.zones]
           : (() => {
+
+
               const picked =
                 state.venue.zones.find((z) => z.id === activeZoneId) ?? state.venue.zones[0];
+
               return picked ? [picked] : [];
+
             })();
+
+
+
       if (!zones.length) {
+
+
         setPersistMsg("No hay zonas para exportar.");
+
+
+
         return;
+
+
       }
+
+
+
+
+
+
       setExportVisualBusy(true);
+
       setPersistMsg(null);
-      for (let zi = 0; zi < zones.length; zi += 1) {
-        const zone = zones[zi];
-        flushSync(() => {
-          setActiveZoneId(zone.id);
-        });
-        await delay(zi === 0 && scope === "current" ? 280 : 360);
-        const root = planExportRef.current;
-        if (!root?.querySelector("svg")) {
-          setPersistMsg(`La zona "${zone.name}" no se pudo capturar.`);
-          break;
+
+
+
+      if (mode === "png") {
+
+
+
+        try {
+
+
+
+          if (zones.length === 1) {
+
+
+            const zone = zones[0]!;
+
+
+
+
+
+            flushSync(() => {
+
+
+              setActiveZoneId(zone.id);
+
+
+            });
+
+
+
+
+
+            await delay(280);
+
+
+
+            const root = planExportRef.current;
+
+
+
+
+
+            if (!root?.querySelector("svg")) {
+
+
+              setPersistMsg(`La zona "${zone.name}" no se pudo capturar.`);
+
+
+
+              return;
+
+
+
+            }
+
+
+
+
+
+
+            await downloadPngCapture(root, zone.name, "");
+
+            setPersistMsg("PNG listo.");
+
+
+          } else {
+
+
+
+            await downloadStackedZonesPng(zones);
+
+            setPersistMsg("PNG completo descargado: todas las zonas en una sola imagen (apiladas).");
+
+
+          }
+
+
+
+        } catch {
+
+
+
+          setPersistMsg("Algo falló al armar la imagen del plano.");
+
+
         }
-        const extra = zones.length > 1 ? `-${String(zi + 1)}` : "";
-        if (mode === "png") await downloadPngCapture(root, zone.name, extra);
-        else downloadSvgCapture(root, zone.name, extra);
-        await delay(160);
+
+
+
+      } else {
+
+
+
+        /** SVG sigue uno por zona (formato técnico). **/
+
+        let stopped = false;
+
+        for (let zi = 0; zi < zones.length; zi += 1) {
+
+
+
+          const zone = zones[zi];
+
+
+
+          flushSync(() => {
+
+
+            setActiveZoneId(zone.id);
+
+
+          });
+
+
+
+
+
+          await delay(zi === 0 && scope === "current" ? 280 : 360);
+
+
+
+          const root = planExportRef.current;
+
+
+
+          if (!root?.querySelector("svg")) {
+
+
+            setPersistMsg(`La zona "${zone.name}" no se pudo capturar.`);
+
+
+
+
+            stopped = true;
+
+
+
+            break;
+
+
+          }
+
+
+
+
+
+
+          const extra = zones.length > 1 ? `-${String(zi + 1)}` : "";
+
+
+
+          downloadSvgCapture(root, zone.name, extra);
+
+
+
+          await delay(160);
+
+
+        }
+
+
+
+
+
+
+        if (!stopped)
+
+
+          setPersistMsg(zones.length > 1 ? `${zones.length} archivos SVG (uno por zona).` : "SVG listo.");
+
       }
-      if (zones.length > 1)
-        setPersistMsg(mode === "png" ? `${zones.length} PNG (uno por zona).` : `${zones.length} SVG.`);
-      else setPersistMsg(mode === "png" ? "PNG listo." : "SVG listo.");
+
     } catch {
+
+
       setPersistMsg("Algo falló al exportar.");
+
+
     } finally {
+
+
       flushSync(() => {
+
+
         setActiveZoneId(snapshotZone);
+
+
       });
+
+
+
+
+
       flushSync(() => {
+
+
         setTab(snapshotTab);
+
+
       });
+
+
+
+
+
       setExportVisualBusy(false);
+
+
     }
+
+
   }
 
   async function handleExportConfirm(): Promise<void> {
@@ -1353,7 +1663,8 @@ export default function EventDashboard() {
             <p className="mt-2 text-[13px] leading-snug text-neutral-400">
               Elegí el formato.
               <span className="block pt-1 text-neutral-500">
-                PNG y SVG se capturan desde el plano interactivo (por un instante te llevamos ahí).
+                PNG y SVG salen del plano interactivo (por un segundo te lleva ahí). Si elegís{" "}
+                <span className="text-neutral-300">todas las zonas en PNG</span>, una sola imagen con todo apilado.
               </span>
             </p>
             <div className="mt-6 space-y-5">
@@ -1419,8 +1730,9 @@ export default function EventDashboard() {
                       type="radio"
                     />
                     <span>
-                      Todas las zonas ({state.venue.zones.length}) · un archivo por zona (
-                      <code className="text-neutral-400">-1</code>, <code className="text-neutral-400">-2</code>…)
+                      Todas las zonas ({state.venue.zones.length}) — en{" "}
+
+                      <strong className="font-medium text-neutral-200">un solo PNG</strong> apiladas verticalmente (sin varias descargas).
                     </span>
                   </label>
                 </fieldset>
